@@ -7,6 +7,8 @@ import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import CustomersPage from "./pages/CustomersPage";
 import CustomerDetailPage from "./pages/CustomerDetailPage";
+import CasesListPage from "./pages/CasesListPage";
+import CaseDetailPage from "./pages/CaseDetailPage";
 import "@/App.css";
 
 // Protected Route wrapper
@@ -81,33 +83,7 @@ function ScreeningPage() {
   );
 }
 
-function CasesPage() {
-  return (
-    <div>
-      <h1 style={{
-        fontSize: "26px",
-        fontWeight: "700",
-        letterSpacing: "-0.5px",
-        color: "#f1f5f9",
-        marginBottom: "8px"
-      }}>Cases</h1>
-      <p style={{ color: "#94a3b8", fontSize: "14px" }}>
-        Manage compliance cases and investigations
-      </p>
-      <div style={{
-        background: "#0d1117",
-        border: "1px solid #1e2530",
-        borderRadius: "12px",
-        padding: "60px 24px",
-        marginTop: "24px",
-        textAlign: "center",
-        color: "#475569"
-      }}>
-        Case management coming soon
-      </div>
-    </div>
-  );
-}
+// CasesPage placeholder removed - using CasesListPage
 
 function AuditLogsPage() {
   return (
@@ -222,7 +198,18 @@ function App() {
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <CasesPage />
+                  <CasesListPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/cases/:id"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CaseDetailPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }

@@ -150,7 +150,7 @@ async def create_admin_user(db, tenant_id):
             {"email": admin_email},
             {"$set": {"password_hash": hash_password(admin_password)}}
         )
-        logger.info(f"Admin password updated")
+        logger.info("Admin password updated")
     
     return sentrix_email, sentrix_password, admin_email, admin_password
 
@@ -714,6 +714,228 @@ async def get_audit_logs(
     }
 
 # ===================================
+# CASE MANAGEMENT ROUTES
+# ===================================
+
+async def auto_create_case(tenant_id: str, customer_id: str, customer_name: str, 
+                           case_type: str, priority: str, created_by: str, details: dict, db):
+    """Helper function to auto-create cases"""
+    case_number = await db.cases.count_documents({"tenant_id": tenant_id}) + 1
+    case_id = f"CASE-{case_number:05d}"
+    
+    case_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "tenant_id": tenant_id,
+        "customer_id": customer_id,
+        "customer_name": customer_name,
+        "case_type": case_type,
+        "priority": priority,
+        "status": "open",
+        "assigned_to": None,
+        "due_date": None,
+        "sar_filed": False,
+        "sar_reference": None,
+        "sar_filed_date": None,
+        "disposition": None,
+        "disposition_note": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": created_by,
+        "details": details
+    }
+    
+    await db.cases.insert_one(case_doc)
+    return case_id
+
+@api_router.get("/cases/{case_id}/notes")
+async def get_case_notes(case_id: str, request: Request):
+    user = await get_current_user(request, db)
+    
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+    
+    notes = await db.case_notes.find({"case_id": case_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"notes": notes}
+
+@api_router.post("/cases/{case_id}/notes")
+async def add_case_note(case_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+    
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": data.get("note"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.case_notes.insert_one(note_doc)
+    await db.cases.update_one({"id": case_id}, {"$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    
+    await log_audit(user["tenant_id"], user, "case_note_added", "cases", case_id, request=request)
+    
+    note_doc.pop("_id", None)
+    return {"message": "Note added successfully", "note": note_doc}
+
+@api_router.post("/cases/{case_id}/escalate")
+async def escalate_case(case_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+    
+    escalated_to = data.get("escalated_to")
+    reason = data.get("reason")
+    
+    update_data = {
+        "status": "escalated",
+        "assigned_to": escalated_to,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.cases.update_one({"id": case_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    
+    # Add escalation note
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": f"Case escalated to {escalated_to}. Reason: {reason}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "is_system": True
+    }
+    await db.case_notes.insert_one(note_doc)
+    
+    # Send email notification
+    from services.email_service import email_service
+    officer_user = await db.users.find_one({"id": escalated_to})
+    if officer_user:
+        await email_service.send_email(
+            officer_user.get("email"),
+            f"Case Escalated - {case['case_id']}",
+            f"Case {case['case_id']} escalated. Customer: {case['customer_name']}. Priority: {case['priority']}. Reason: {reason}"
+        )
+    
+    await log_audit(user["tenant_id"], user, "case_escalated", "cases", case_id,
+                   {"escalated_to": escalated_to, "reason": reason}, request)
+    
+    return {"message": "Case escalated successfully"}
+
+@api_router.post("/cases/{case_id}/sar")
+async def update_sar_flag(case_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+    
+    sar_reference = data.get("sar_reference")
+    
+    update_data = {
+        "sar_filed": True,
+        "sar_reference": sar_reference,
+        "sar_filed_date": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.cases.update_one({"id": case_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    
+    # Add SAR note
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": f"SAR filed. Reference: {sar_reference}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "is_system": True
+    }
+    await db.case_notes.insert_one(note_doc)
+    
+    await log_audit(user["tenant_id"], user, "sar_filed", "cases", case_id,
+                   {"sar_reference": sar_reference}, request)
+    
+    return {"message": "SAR flag updated successfully"}
+
+@api_router.post("/cases/{case_id}/close")
+async def close_case(case_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+    
+    disposition = data.get("disposition")
+    disposition_note = data.get("disposition_note")
+    
+    if not disposition or not disposition_note:
+        raise HTTPException(400, "Both disposition and disposition note are required to close a case")
+    
+    valid_dispositions = ["no_further_action", "sar_filed", "customer_exited", "monitoring_increased", "referred_to_law_enforcement"]
+    if disposition not in valid_dispositions:
+        raise HTTPException(400, f"Invalid disposition. Must be one of: {', '.join(valid_dispositions)}")
+    
+    update_data = {
+        "status": "closed",
+        "disposition": disposition,
+        "disposition_note": disposition_note,
+        "closed_at": datetime.now(timezone.utc).isoformat(),
+        "closed_by": user["id"],
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.cases.update_one({"id": case_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    
+    # Add closure note
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": f"Case closed. Disposition: {disposition.replace('_', ' ').title()}. Note: {disposition_note}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "is_system": True
+    }
+    await db.case_notes.insert_one(note_doc)
+    
+    await log_audit(user["tenant_id"], user, "case_closed", "cases", case_id,
+                   {"disposition": disposition}, request)
+    
+    return {"message": "Case closed successfully"}
+
+@api_router.put("/cases/{case_id}")
+async def update_case(case_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+    
+    # Only allow updating certain fields
+    allowed_fields = ["priority", "status", "assigned_to", "due_date"]
+    update_data = {k: v for k, v in data.items() if k in allowed_fields}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.cases.update_one({"id": case_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    
+    await log_audit(user["tenant_id"], user, "case_updated", "cases", case_id, update_data, request)
+    
+    return {"message": "Case updated successfully"}
+
+# ===================================
 # CDD MANAGEMENT ROUTES
 # ===================================
 
@@ -840,25 +1062,14 @@ async def get_expiring_reviews(request: Request, days: int = 30):
     from services.email_service import email_service
     
     if expiring_customers:
-        for customer in expiring_customers:
-            customer_name = customer.get("customer_data", {}).get("full_name") or customer.get("customer_data", {}).get("company_legal_name", "Customer")
-            expiry_date = customer.get("cdd_expiry_date")
+        for cust in expiring_customers:
+            cust_name = cust.get("customer_data", {}).get("full_name") or cust.get("customer_data", {}).get("company_legal_name", "Customer")
+            exp_date = cust.get("cdd_expiry_date")
             
             await email_service.send_email(
                 user.get("email"),
-                f"CDD Review Expiring Soon - {customer_name}",
-                f"""<html><body>
-                <h2>CDD Review Expiry Alert</h2>
-                <p>The CDD review for the following customer is expiring soon:</p>
-                <ul>
-                    <li><strong>Customer:</strong> {customer_name}</li>
-                    <li><strong>Customer ID:</strong> {customer.get('id')}</li>
-                    <li><strong>CDD Tier:</strong> {customer.get('cdd_tier', 'N/A').upper()}</li>
-                    <li><strong>Risk Level:</strong> {customer.get('risk_level', 'N/A').upper()}</li>
-                    <li><strong>Expiry Date:</strong> {expiry_date}</li>
-                </ul>
-                <p>Please schedule a CDD review renewal.</p>
-                </body></html>"""
+                f"CDD Review Expiring Soon - {cust_name}",
+                f"CDD review expiring for {cust_name} (ID: {cust.get('id')}). Tier: {cust.get('cdd_tier', 'N/A')}. Expiry: {exp_date}"
             )
     
     return {
@@ -957,7 +1168,6 @@ async def mark_adverse_media_hit(customer_id: str, data: dict, request: Request)
         new_risk_score = min(current_risk_score + 15, 100)
     else:
         # Recalculate based on all relevant hits
-        adverse_media_points = min(relevant_count * 15, 45)
         new_risk_score = current_risk_score
     
     # Determine risk level
@@ -1065,18 +1275,21 @@ async def screen_pep(customer_id: str, request: Request):
         await email_service.send_email(
             admin_email,
             f"PEP Match Detected - {customer_data.get('full_name', 'Customer')}",
-            f"""<html><body>
-            <h2>PEP Match Alert</h2>
-            <p>A PEP match has been detected for customer:</p>
-            <ul>
-                <li><strong>Name:</strong> {customer_data.get('full_name', 'N/A')}</li>
-                <li><strong>PEP Tier:</strong> {pep_tier.upper()}</li>
-                <li><strong>Position:</strong> {pep_result.get('match_details', {}).get('position', 'N/A')}</li>
-                <li><strong>Country:</strong> {pep_result.get('match_details', {}).get('country', 'N/A')}</li>
-                <li><strong>Risk Score:</strong> {new_risk_score}/100</li>
-            </ul>
-            <p>Please review this customer immediately.</p>
-            </body></html>"""
+            f"PEP match detected for {customer_data.get('full_name', 'N/A')}. Tier: {pep_tier}. Risk Score: {new_risk_score}/100."
+        )
+        
+        # Auto-create case for PEP match
+        customer_name = customer_data.get("full_name") or customer_data.get("company_legal_name", "Unknown")
+        priority = "critical" if pep_tier == "tier1" else "high" if pep_tier == "tier2" else "medium"
+        await auto_create_case(
+            tenant_id=user["tenant_id"],
+            customer_id=customer_id,
+            customer_name=customer_name,
+            case_type="pep_match",
+            priority=priority,
+            created_by=user["id"],
+            details={"pep_tier": pep_tier, "risk_score": new_risk_score, "trigger": "pep_screening"},
+            db=db
         )
     
     await db.customers.update_one(
@@ -1101,43 +1314,76 @@ async def run_screening(customer_id: str, request: Request):
     if not customer:
         raise HTTPException(404, "Customer not found")
     
-    # Mock screening results
-    import secrets
-    # Use secrets for cryptographically secure random selection
-    sanctions_options = ["no_match", "no_match", "no_match", "potential_match"]
-    pep_options = [False, False, False, True]
-    adverse_options = [False, False, True]
+    # Use screening service for all screenings
+    from services.screening_service import screening_service
+    customer_data = customer.get("customer_data", {})
+    
+    sanctions_result = await screening_service.screen_sanctions(customer_data)
+    pep_result = await screening_service.screen_pep(customer_data)
+    adverse_result = await screening_service.screen_adverse_media(customer_data)
     
     screening_results = {
-        "sanctions": {"status": sanctions_options[secrets.randbelow(len(sanctions_options))]},
-        "pep": {"is_pep": pep_options[secrets.randbelow(len(pep_options))]},
-        "adverse_media": {"has_hits": adverse_options[secrets.randbelow(len(adverse_options))]}
+        "sanctions": sanctions_result,
+        "pep": pep_result,
+        "adverse_media": adverse_result
     }
     
     # Update customer with screening results
     update_data = {
-        "sanctions_status": screening_results["sanctions"]["status"],
-        "pep_status": "match" if screening_results["pep"]["is_pep"] else "no_match",
-        "adverse_media_status": "hits_found" if screening_results["adverse_media"]["has_hits"] else "no_hits",
+        "sanctions_status": sanctions_result["status"],
+        "pep_status": "match" if pep_result.get("is_pep") else "no_match",
+        "adverse_media_status": "hits_found" if adverse_result.get("has_hits") else "no_hits",
+        "pep_screening": pep_result,
+        "adverse_media_screening": adverse_result,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     
     # Calculate risk score
     risk_score = 15  # Base
-    if screening_results["sanctions"]["status"] == "potential_match":
+    if sanctions_result["status"] == "potential_match":
+        risk_score += 25
+    if pep_result.get("is_pep"):
         risk_score += 20
-    if screening_results["pep"]["is_pep"]:
-        risk_score += 20
-    if screening_results["adverse_media"]["has_hits"]:
+    if adverse_result.get("has_hits"):
         risk_score += 15
     
     update_data["risk_score"] = risk_score
     update_data["risk_level"] = "low" if risk_score < 30 else "medium" if risk_score < 66 else "high"
+    update_data["cdd_tier"] = auto_assign_cdd_tier(risk_score)
     
     await db.customers.update_one(
-        {"id": customer_id},
+        {"id": customer_id, "tenant_id": user["tenant_id"]},
         {"$set": update_data}
     )
+    
+    # Auto-create cases for matches
+    customer_name = customer_data.get("full_name") or customer_data.get("company_legal_name", "Unknown")
+    
+    if sanctions_result["status"] == "potential_match":
+        await auto_create_case(
+            tenant_id=user["tenant_id"],
+            customer_id=customer_id,
+            customer_name=customer_name,
+            case_type="sanctions_match",
+            priority="critical",
+            created_by=user["id"],
+            details={"matched_list": sanctions_result.get("matched_list"), "trigger": "bulk_screening"},
+            db=db
+        )
+    
+    if pep_result.get("is_pep"):
+        pep_tier = pep_result.get("pep_tier", "tier3")
+        priority = "critical" if pep_tier == "tier1" else "high" if pep_tier == "tier2" else "medium"
+        await auto_create_case(
+            tenant_id=user["tenant_id"],
+            customer_id=customer_id,
+            customer_name=customer_name,
+            case_type="pep_match",
+            priority=priority,
+            created_by=user["id"],
+            details={"pep_tier": pep_tier, "trigger": "bulk_screening"},
+            db=db
+        )
     
     await log_audit(user["tenant_id"], user, "screening_run", "screening", customer_id, request=request)
     

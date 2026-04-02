@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Plus, Search, Filter } from "lucide-react";
@@ -13,11 +13,7 @@ export default function CustomersPage() {
   const [filterRisk, setFilterRisk] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [filterStatus, filterRisk]);
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (filterStatus) params.append("status", filterStatus);
@@ -32,7 +28,11 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus, filterRisk]);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   const filteredCustomers = customers.filter(c => {
     if (!search) return true;
@@ -263,15 +263,15 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredCustomers.map((customer, index) => (
+                {filteredCustomers.map((customer, idx) => (
                   <tr
                     key={customer.id}
                     style={{
-                      borderBottom: index < filteredCustomers.length - 1 ? "1px solid #0f1520" : "none",
+                      borderBottom: idx < filteredCustomers.length - 1 ? "1px solid #0f1520" : "none",
                       cursor: "pointer"
                     }}
                     onClick={() => navigate(`/customers/${customer.id}`)}
-                    data-testid={`customer-row-${index}`}
+                    data-testid={`customer-row-${customer.id}`}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = "#1e2530";
                     }}

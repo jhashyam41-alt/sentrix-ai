@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Users, AlertCircle, FileSearch, TrendingUp } from "lucide-react";
 
@@ -8,11 +8,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/dashboard/stats`, {
         withCredentials: true
@@ -23,7 +19,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -77,18 +77,18 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statCards.map((stat, index) => {
+        {statCards.map((stat) => {
           const Icon = stat.icon;
           return (
             <div
-              key={index}
+              key={stat.title}
               style={{
                 background: "#0d1117",
                 border: "1px solid #1e2530",
                 borderRadius: "12px",
                 padding: "24px"
               }}
-              data-testid={`stat-card-${index}`}
+              data-testid={`stat-card-${stat.title.toLowerCase().replace(/ /g, '-')}`}
             >
               <div className="flex items-center justify-between mb-4">
                 <div style={{
@@ -142,12 +142,12 @@ export default function DashboardPage() {
         
         {stats?.recent_customers && stats.recent_customers.length > 0 ? (
           <div className="space-y-3">
-            {stats.recent_customers.map((customer, index) => (
+            {stats.recent_customers.map((customer, idx) => (
               <div
-                key={index}
+                key={customer.id}
                 style={{
-                  borderBottom: index < stats.recent_customers.length - 1 ? "1px solid #0f1520" : "none",
-                  paddingBottom: index < stats.recent_customers.length - 1 ? "12px" : "0"
+                  borderBottom: idx < stats.recent_customers.length - 1 ? "1px solid #0f1520" : "none",
+                  paddingBottom: idx < stats.recent_customers.length - 1 ? "12px" : "0"
                 }}
               >
                 <div className="flex items-center justify-between">
@@ -200,12 +200,12 @@ export default function DashboardPage() {
         
         {stats?.open_cases_list && stats.open_cases_list.length > 0 ? (
           <div className="space-y-3">
-            {stats.open_cases_list.map((caseItem, index) => (
+            {stats.open_cases_list.map((caseItem, idx) => (
               <div
-                key={index}
+                key={caseItem.id}
                 style={{
-                  borderBottom: index < stats.open_cases_list.length - 1 ? "1px solid #0f1520" : "none",
-                  paddingBottom: index < stats.open_cases_list.length - 1 ? "12px" : "0"
+                  borderBottom: idx < stats.open_cases_list.length - 1 ? "1px solid #0f1520" : "none",
+                  paddingBottom: idx < stats.open_cases_list.length - 1 ? "12px" : "0"
                 }}
               >
                 <div className="flex items-center justify-between">

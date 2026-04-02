@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 
 const AuthContext = createContext(null);
@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
 
   const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/auth/me`, {
         withCredentials: true
@@ -20,13 +20,13 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API]);
 
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     try {
       const { data } = await axios.post(
         `${API}/auth/login`,
@@ -47,9 +47,9 @@ export const AuthProvider = ({ children }) => {
         : String(detail || "Login failed");
       throw new Error(message);
     }
-  };
+  }, [API]);
 
-  const verify2FA = async (token, tempToken) => {
+  const verify2FA = useCallback(async (token, tempToken) => {
     try {
       const { data } = await axios.post(
         `${API}/auth/2fa/verify?temp_token=${tempToken}`,
@@ -62,9 +62,9 @@ export const AuthProvider = ({ children }) => {
       const detail = error.response?.data?.detail;
       throw new Error(String(detail || "2FA verification failed"));
     }
-  };
+  }, [API]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
     } catch (error) {
@@ -72,10 +72,18 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(false);
     }
-  };
+  }, [API]);
+
+  const contextValue = useMemo(() => ({
+    user,
+    loading,
+    login,
+    logout,
+    verify2FA
+  }), [user, loading, login, logout, verify2FA]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, verify2FA }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

@@ -63,8 +63,8 @@ async def startup_event():
     # Seed admin and tenant
     await seed_admin_and_tenant()
 
-async def seed_admin_and_tenant():
-    # Create default tenant
+async def create_default_tenant(db):
+    """Create default tenant if it doesn't exist"""
     tenant_id = "default-tenant"
     tenant = await db.tenants.find_one({"id": tenant_id})
     if not tenant:
@@ -81,13 +81,15 @@ async def seed_admin_and_tenant():
         }
         await db.tenants.insert_one(tenant_doc)
         logger.info(f"Default tenant created: {tenant_id}")
-    
-    # Seed admin
+    return tenant_id
+
+async def create_admin_user(db, tenant_id):
+    """Create or update admin user"""
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@amlguard.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!@#")
     
     existing = await db.users.find_one({"email": admin_email})
-    if existing is None:
+    if existing == None:
         hashed = hash_password(admin_password)
         user_doc = {
             "_id": ObjectId(),
@@ -111,7 +113,10 @@ async def seed_admin_and_tenant():
         )
         logger.info(f"Admin password updated")
     
-    # Write credentials to test file
+    return admin_email, admin_password
+
+def write_test_credentials(admin_email, admin_password):
+    """Write test credentials to file"""
     os.makedirs("/app/memory", exist_ok=True)
     with open("/app/memory/test_credentials.md", "w") as f:
         f.write(f"""# AMLGuard Test Credentials
@@ -128,6 +133,12 @@ async def seed_admin_and_tenant():
 - Dashboard: GET /api/dashboard/stats
 - Customers: GET /api/customers
 """)
+
+async def seed_admin_and_tenant():
+    """Seed admin user and default tenant"""
+    tenant_id = await create_default_tenant(db)
+    admin_email, admin_password = await create_admin_user(db, tenant_id)
+    write_test_credentials(admin_email, admin_password)
 
 # ===================================
 # HELPER FUNCTIONS
@@ -151,7 +162,7 @@ async def log_audit(tenant_id: str, user: dict, action_type: str, module: str, r
     await db.audit_logs.insert_one(audit_doc)
 
 def format_api_error(detail):
-    if detail is None:
+    if detail == None:
         return "Something went wrong"
     if isinstance(detail, str):
         return detail
@@ -660,11 +671,16 @@ async def run_screening(customer_id: str, request: Request):
         raise HTTPException(404, "Customer not found")
     
     # Mock screening results
-    import random
+    import secrets
+    # Use secrets for cryptographically secure random selection
+    sanctions_options = ["no_match", "no_match", "no_match", "potential_match"]
+    pep_options = [False, False, False, True]
+    adverse_options = [False, False, True]
+    
     screening_results = {
-        "sanctions": {"status": random.choice(["no_match", "no_match", "no_match", "potential_match"])},
-        "pep": {"is_pep": random.choice([False, False, False, True])},
-        "adverse_media": {"has_hits": random.choice([False, False, True])}
+        "sanctions": {"status": sanctions_options[secrets.randbelow(len(sanctions_options))]},
+        "pep": {"is_pep": pep_options[secrets.randbelow(len(pep_options))]},
+        "adverse_media": {"has_hits": adverse_options[secrets.randbelow(len(adverse_options))]}
     }
     
     # Update customer with screening results

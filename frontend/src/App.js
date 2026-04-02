@@ -6,6 +6,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import CustomersPage from "./pages/CustomersPage";
+import CustomerDetailPage from "./pages/CustomerDetailPage";
 import "@/App.css";
 
 // Protected Route wrapper
@@ -189,6 +190,17 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <CustomersPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/customers/:id"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CustomerDetailPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }

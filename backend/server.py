@@ -705,6 +705,98 @@ async def get_audit_logs(
     }
 
 # ===================================
+# PEP SCREENING ROUTES
+# ===================================
+
+@api_router.post("/screening/pep/{customer_id}")
+async def screen_pep(customer_id: str, request: Request):
+    user = await get_current_user(request, db)
+    
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    
+    # Import screening service
+    from services.screening_service import screening_service
+    
+    customer_data = customer.get("customer_data", {})
+    pep_result = await screening_service.screen_pep(customer_data)
+    
+    # Store PEP screening result
+    pep_screening_doc = {
+        "id": str(uuid.uuid4()),
+        "customer_id": customer_id,
+        "tenant_id": user["tenant_id"],
+        **pep_result,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.pep_screenings.insert_one(pep_screening_doc)
+    
+    # Update customer with PEP status
+    update_data = {
+        "pep_screening": pep_result,
+        "pep_status": "match" if pep_result.get("is_pep") else "no_match",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # If PEP detected, increase risk score and potentially trigger EDD
+    if pep_result.get("is_pep"):
+        pep_tier = pep_result.get("pep_tier")
+        pep_points = 0
+        if pep_tier == "tier1":
+            pep_points = 30
+        elif pep_tier == "tier2":
+            pep_points = 20
+        elif pep_tier == "tier3":
+            pep_points = 10
+        elif pep_tier == "rca":
+            pep_points = 5
+        
+        new_risk_score = min(customer.get("risk_score", 0) + pep_points, 100)
+        update_data["risk_score"] = new_risk_score
+        
+        # Determine risk level
+        if new_risk_score <= 30:
+            update_data["risk_level"] = "low"
+        elif new_risk_score <= 65:
+            update_data["risk_level"] = "medium"
+        else:
+            update_data["risk_level"] = "high"
+            update_data["cdd_tier"] = "edd"
+            update_data["cdd_status"] = "requires_edd"
+        
+        # Send email alert to admin
+        from services.email_service import email_service
+        admin_email = user.get("email")
+        await email_service.send_email(
+            admin_email,
+            f"PEP Match Detected - {customer_data.get('full_name', 'Customer')}",
+            f"""<html><body>
+            <h2>PEP Match Alert</h2>
+            <p>A PEP match has been detected for customer:</p>
+            <ul>
+                <li><strong>Name:</strong> {customer_data.get('full_name', 'N/A')}</li>
+                <li><strong>PEP Tier:</strong> {pep_tier.upper()}</li>
+                <li><strong>Position:</strong> {pep_result.get('match_details', {}).get('position', 'N/A')}</li>
+                <li><strong>Country:</strong> {pep_result.get('match_details', {}).get('country', 'N/A')}</li>
+                <li><strong>Risk Score:</strong> {new_risk_score}/100</li>
+            </ul>
+            <p>Please review this customer immediately.</p>
+            </body></html>"""
+        )
+    
+    await db.customers.update_one(
+        {"id": customer_id, "tenant_id": user["tenant_id"]},
+        {"$set": update_data}
+    )
+    
+    await log_audit(user["tenant_id"], user, "pep_screening_run", "screening", customer_id, 
+                   {"is_pep": pep_result.get("is_pep"), "pep_tier": pep_result.get("pep_tier")}, request)
+    
+    return {"message": "PEP screening completed", "pep_screening": pep_result}
+
+# ===================================
 # SCREENING ROUTES (MOCK)
 # ===================================
 

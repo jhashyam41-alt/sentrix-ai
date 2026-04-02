@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Shield, Lock, Mail } from "lucide-react";
 
 export default function LoginPage() {
@@ -256,11 +256,30 @@ export default function LoginPage() {
                 padding: "12px",
                 border: "none",
                 cursor: loading ? "not-allowed" : "pointer",
-                fontSize: "14px"
+                fontSize: "14px",
+                marginBottom: "16px"
               }}
             >
               {loading ? "Signing in..." : "Sign In"}
             </button>
+
+            <div style={{ textAlign: "center" }}>
+              <span style={{ color: "#94a3b8", fontSize: "14px" }}>
+                Don't have an account?{" "}
+              </span>
+              <Link
+                to="/register"
+                data-testid="register-link"
+                style={{
+                  color: "#2563eb",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  textDecoration: "none"
+                }}
+              >
+                Sign Up
+              </Link>
+            </div>
           </form>
         </div>
       </div>

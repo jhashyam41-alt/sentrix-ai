@@ -91,6 +91,30 @@ async def create_default_tenant(db):
 
 async def create_admin_user(db, tenant_id):
     """Create or update admin user"""
+    # Create shyam@sentrixai.com admin
+    sentrix_email = "shyam@sentrixai.com"
+    sentrix_password = "Sentrix@2024"
+    
+    sentrix_user = await db.users.find_one({"email": sentrix_email})
+    if sentrix_user is None:
+        hashed = hash_password(sentrix_password)
+        user_doc = {
+            "_id": ObjectId(),
+            "id": str(uuid.uuid4()),
+            "email": sentrix_email,
+            "password_hash": hashed,
+            "name": "Shyam - Super Admin",
+            "role": "super_admin",
+            "tenant_id": tenant_id,
+            "totp_enabled": False,
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.users.insert_one(user_doc)
+        logger.info(f"Sentrix admin user created: {sentrix_email}")
+    
+    # Create default admin@amlguard.com admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@amlguard.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!@#")
     
@@ -119,15 +143,20 @@ async def create_admin_user(db, tenant_id):
         )
         logger.info(f"Admin password updated")
     
-    return admin_email, admin_password
+    return sentrix_email, sentrix_password, admin_email, admin_password
 
-def write_test_credentials(admin_email, admin_password):
+def write_test_credentials(sentrix_email, sentrix_password, admin_email, admin_password):
     """Write test credentials to file"""
     os.makedirs("/app/memory", exist_ok=True)
     with open("/app/memory/test_credentials.md", "w") as f:
         f.write(f"""# AMLGuard Test Credentials
 
-## Admin Account
+## Sentrix Admin Account (Primary)
+- Email: {sentrix_email}
+- Password: {sentrix_password}
+- Role: super_admin
+
+## Default Admin Account
 - Email: {admin_email}
 - Password: {admin_password}
 - Role: super_admin
@@ -143,8 +172,8 @@ def write_test_credentials(admin_email, admin_password):
 async def seed_admin_and_tenant():
     """Seed admin user and default tenant"""
     tenant_id = await create_default_tenant(db)
-    admin_email, admin_password = await create_admin_user(db, tenant_id)
-    write_test_credentials(admin_email, admin_password)
+    sentrix_email, sentrix_password, admin_email, admin_password = await create_admin_user(db, tenant_id)
+    write_test_credentials(sentrix_email, sentrix_password, admin_email, admin_password)
 
 # ===================================
 # HELPER FUNCTIONS
@@ -181,13 +210,20 @@ def format_api_error(detail):
 # ===================================
 
 @api_router.post("/auth/register")
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, request: Request):
     if not validate_password(req.password):
         raise HTTPException(400, "Password must be at least 12 characters with uppercase, number, and symbol")
     
     existing = await db.users.find_one({"email": req.email.lower()})
     if existing:
         raise HTTPException(400, "Email already registered")
+    
+    # Check if this is the first user (excluding seed admins)
+    user_count = await db.users.count_documents({})
+    is_first_user = user_count <= 2  # 2 seed admins already exist
+    
+    # First user becomes Super Admin
+    user_role = "super_admin" if is_first_user else req.role.value
     
     user_id = str(uuid.uuid4())
     user_doc = {
@@ -196,7 +232,7 @@ async def register(req: RegisterRequest):
         "email": req.email.lower(),
         "password_hash": hash_password(req.password),
         "name": req.name,
-        "role": req.role.value,
+        "role": user_role,
         "tenant_id": req.tenant_id,
         "totp_enabled": False,
         "is_active": True,
@@ -205,6 +241,10 @@ async def register(req: RegisterRequest):
     }
     
     await db.users.insert_one(user_doc)
+    await log_audit(req.tenant_id, {"id": "system", "name": "System", "role": "system"}, 
+                   "user_registered", "auth", user_id, 
+                   {"email": req.email.lower(), "role": user_role}, request)
+    
     user_doc["_id"] = str(user_doc["_id"])
     user_doc.pop("password_hash")
     

@@ -12,73 +12,46 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 ## What's Been Implemented
 
 ### Auth & Multi-Tenant (Complete)
-- Email/Password registration & login
-- 2FA (TOTP) setup and verification
-- Role-based access: Super Admin, Compliance Officer, Analyst, Read-Only
-- Default admin seeding (shyam@sentrixai.com / Sentrix@2024)
-- JWT cookie-based auth with refresh tokens
+- Email/Password registration & login, 2FA (TOTP)
+- Roles: Super Admin, Compliance Officer, Analyst, Read-Only
+- Default admin: shyam@sentrixai.com / Sentrix@2024
 
-### Dashboard (Complete)
-- Stats: Total customers, pending reviews, high-risk, open cases
-- Recent customers list
-- Open cases summary
+### Dashboard, Customer Onboarding, Screening, CDD/EDD, Case Management, Audit Log (All Complete)
+*See CHANGELOG.md for implementation dates*
 
-### Customer Onboarding (Complete)
-- Individual & Corporate customer forms
-- Document upload (PDF, images, 10MB max)
-- Customer detail page with full profile
+## Code Architecture (Post-Refactoring — Apr 2026)
 
-### Screening (Complete — MOCKED)
-- PEP Screening with tier classification (Tier 1-3, RCA)
-- Adverse Media Screening with hit review & relevance marking
-- Sanctions Screening (bulk screening endpoint)
-- Auto risk score calculation
-- Auto CDD tier assignment based on risk score
-- **Note**: All screening uses mock data. Replace with real providers in production.
+### Backend Services
+- `server.py` — FastAPI routes, auth, business logic
+- `services/screening_service.py` — Mock PEP/Sanctions/Adverse Media screening
+- `services/email_service.py` — Mock email logging
+- `services/pdf_service.py` — PDF generation for audit reports
+- `services/risk_service.py` — Risk scoring helpers (calculate_risk_level, calculate_pep_points)
+- `services/storage_service.py` — File storage
 
-### CDD/EDD Management (Complete)
-- Auto-tiered CDD (SDD / Standard CDD / EDD) based on risk score
-- CDD status workflow (not_started → in_progress → complete)
-- EDD checklist with 6 required sign-offs
-- CDD expiry dates based on risk level (1-3 years)
-- Expiring reviews endpoint with email alerts
-
-### Case Management (Complete) — Implemented Apr 2026
-- Auto-case creation on PEP/Sanctions match detection
-- Cases list with status/priority filters
-- Case detail page with full management UI
-- Internal notes (append-only)
-- Case escalation with reason
-- SAR filing with reference number
-- Case closure with disposition and notes
-- Status & priority updates
-
-### Audit Log (Complete) — Implemented Apr 2026
-- Immutable append-only audit trail of ALL system actions
-- Logged fields: timestamp, user name, role, action, module, record ID, IP address
-- No edit/delete endpoints (verified immutable)
-- Searchable by: action type, user, module, date range
-- Dynamic filter dropdowns populated from backend
-- CSV export with all fields
-- PDF export (reportlab) with formatted table
-- Pagination (50 per page)
-- Dark theme UI matching platform design
-
-## Credentials
-- Admin: shyam@sentrixai.com / Sentrix@2024
-- Admin: admin@amlguard.com / AMLGuard2026!
+### Frontend Components (Refactored)
+- `pages/CustomerDetailPage.js` (378 lines) → uses:
+  - `components/customers/PEPScreeningCard.js`
+  - `components/customers/AdverseMediaCard.js`
+  - `components/customers/CDDManagementCard.js`
+  - `components/customers/RelatedCasesCard.js`
+- `pages/CaseDetailPage.js` (395 lines) → uses:
+  - `components/cases/CaseNotes.js`
+  - `components/cases/CaseActions.js`
+- `pages/AuditLogPage.js` (152 lines) → uses:
+  - `components/audit/AuditLogFilters.js`
+  - `components/audit/AuditLogTable.js`
 
 ## Prioritized Backlog
 
 ### P1 — Next
-- Reporting Module (`/reports`) — stats, charts, PDF/CSV report generation
-- Admin Settings & Stripe Billing (`/settings/billing`) — tenant config, subscriptions
+- Reporting Module (`/reports`) — stats, charts, PDF/CSV generation
+- Admin Settings & Stripe Billing (`/settings/billing`)
 
 ### P2 — Future
 - In-App Notification Bell + SendGrid email integration
 - Public self-service onboarding portal (`/onboarding/:token`)
 - Replace mocked screening with real providers (Refinitiv, ComplyAdvantage, Dow Jones)
-- Refactor large components (CustomerDetailPage.js → sub-components)
 
 ## Mocked Services
 - `screening_service.py` — Returns simulated PEP/Sanctions/Adverse Media results

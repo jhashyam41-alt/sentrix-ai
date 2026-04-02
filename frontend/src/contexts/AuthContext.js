@@ -3,11 +3,12 @@ import axios from "axios";
 
 const AuthContext = createContext(null);
 
+// Define API URL outside component to avoid recreating on every render
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
   const checkAuth = useCallback(async () => {
     try {
@@ -20,7 +21,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [API]);
+  }, []); // API is now a constant, no dependencies needed
 
   useEffect(() => {
     checkAuth();
@@ -47,7 +48,7 @@ export const AuthProvider = ({ children }) => {
         : String(detail || "Login failed");
       throw new Error(message);
     }
-  }, [API]);
+  }, []); // API is constant
 
   const verify2FA = useCallback(async (token, tempToken) => {
     try {
@@ -62,7 +63,7 @@ export const AuthProvider = ({ children }) => {
       const detail = error.response?.data?.detail;
       throw new Error(String(detail || "2FA verification failed"));
     }
-  }, [API]);
+  }, []); // API is constant
 
   const logout = useCallback(async () => {
     try {
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(false);
     }
-  }, [API]);
+  }, []); // API is constant
 
   const contextValue = useMemo(() => ({
     user,

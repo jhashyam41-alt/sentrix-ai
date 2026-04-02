@@ -16,7 +16,13 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Import models and auth
-from models import *
+from models import (
+    UserRole, OnboardingStatus, CDDTier, CDDStatus, RiskLevel, 
+    ScreeningStatus, CasePriority, CaseStatus, CaseType,
+    User, LoginRequest, RegisterRequest, TOTPSetupResponse, TOTPVerifyRequest,
+    Customer, IndividualCustomerData, CorporateCustomerData, RiskScoreBreakdown,
+    Case, CaseComment, AuditLog, Tenant, SubscriptionPlan, Notification
+)
 from auth import (
     hash_password, verify_password, create_access_token, create_refresh_token,
     create_temp_token, get_current_user, totp_service, validate_password
@@ -89,7 +95,7 @@ async def create_admin_user(db, tenant_id):
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!@#")
     
     existing = await db.users.find_one({"email": admin_email})
-    if existing == None:
+    if existing is None:
         hashed = hash_password(admin_password)
         user_doc = {
             "_id": ObjectId(),
@@ -162,7 +168,7 @@ async def log_audit(tenant_id: str, user: dict, action_type: str, module: str, r
     await db.audit_logs.insert_one(audit_doc)
 
 def format_api_error(detail):
-    if detail == None:
+    if detail is None:
         return "Something went wrong"
     if isinstance(detail, str):
         return detail

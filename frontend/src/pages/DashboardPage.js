@@ -4,6 +4,13 @@ import { Users, AlertCircle, FileSearch, TrendingUp } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Helper function to get priority badge color
+const getPriorityBadgeColor = (priority) => {
+  if (priority === "critical" || priority === "high") return "danger";
+  if (priority === "medium") return "warning";
+  return "success";
+};
+
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -218,7 +225,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`status-badge status-${caseItem.priority === "critical" || caseItem.priority === "high" ? "danger" : caseItem.priority === "medium" ? "warning" : "success"}`}>
+                    <span className={`status-badge status-${getPriorityBadgeColor(caseItem.priority)}`}>
                       {caseItem.priority}
                     </span>
                     <span style={{

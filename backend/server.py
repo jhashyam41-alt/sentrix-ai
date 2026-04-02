@@ -686,32 +686,183 @@ async def download_file(file_id: str, request: Request, auth: Optional[str] = Qu
 # AUDIT LOG ROUTES
 # ===================================
 
+def _build_audit_query(tenant_id: str, action_type: str = None, user_name: str = None,
+                       module: str = None, start_date: str = None, end_date: str = None) -> dict:
+    """Build MongoDB query for audit logs (shared by list + export)."""
+    query = {"tenant_id": tenant_id}
+    if action_type:
+        query["action_type"] = action_type
+    if user_name:
+        query["user_name"] = {"$regex": user_name, "$options": "i"}
+    if module:
+        query["module"] = module
+    if start_date or end_date:
+        ts_filter = {}
+        if start_date:
+            ts_filter["$gte"] = start_date
+        if end_date:
+            ts_filter["$lte"] = end_date + "T23:59:59"
+        query["timestamp"] = ts_filter
+    return query
+
 @api_router.get("/audit-logs")
 async def get_audit_logs(
     request: Request,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     action_type: Optional[str] = None,
+    user_name: Optional[str] = None,
+    module: Optional[str] = None,
     limit: int = 100,
     skip: int = 0
 ):
     user = await get_current_user(request, db)
-    
-    # Only certain roles can view audit logs
+
     if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
         raise HTTPException(403, "Access denied")
-    
-    query = {"tenant_id": user["tenant_id"]}
-    if action_type:
-        query["action_type"] = action_type
-    
+
+    query = _build_audit_query(user["tenant_id"], action_type, user_name, module, start_date, end_date)
+
     logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
     total = await db.audit_logs.count_documents(query)
-    
+
     return {
         "logs": logs,
         "total": total
     }
+
+@api_router.get("/audit-logs/filters")
+async def get_audit_log_filters(request: Request):
+    """Return distinct action types and modules for filter dropdowns."""
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
+        raise HTTPException(403, "Access denied")
+
+    action_types = await db.audit_logs.distinct("action_type", {"tenant_id": user["tenant_id"]})
+    modules = await db.audit_logs.distinct("module", {"tenant_id": user["tenant_id"]})
+    users_list = await db.audit_logs.distinct("user_name", {"tenant_id": user["tenant_id"]})
+    return {"action_types": sorted(action_types), "modules": sorted(modules), "users": sorted(users_list)}
+
+@api_router.get("/audit-logs/export/csv")
+async def export_audit_csv(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    action_type: Optional[str] = None,
+    user_name: Optional[str] = None,
+    module: Optional[str] = None
+):
+    import csv, io
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
+        raise HTTPException(403, "Access denied")
+
+    query = _build_audit_query(user["tenant_id"], action_type, user_name, module, start_date, end_date)
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).to_list(5000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Timestamp", "User", "Role", "Action", "Module", "Record ID", "IP Address", "Details"])
+    for log in logs:
+        writer.writerow([
+            log.get("timestamp", ""),
+            log.get("user_name", ""),
+            log.get("user_role", ""),
+            log.get("action_type", ""),
+            log.get("module", ""),
+            log.get("record_id", ""),
+            log.get("ip_address", ""),
+            str(log.get("details", ""))
+        ])
+
+    await log_audit(user["tenant_id"], user, "audit_log_exported", "audit", None, {"format": "csv"}, request)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=audit_log_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+@api_router.get("/audit-logs/export/pdf")
+async def export_audit_pdf(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    action_type: Optional[str] = None,
+    user_name: Optional[str] = None,
+    module: Optional[str] = None
+):
+    import io
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
+        raise HTTPException(403, "Access denied")
+
+    query = _build_audit_query(user["tenant_id"], action_type, user_name, module, start_date, end_date)
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).to_list(5000)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=0.4*inch, rightMargin=0.4*inch,
+                            topMargin=0.5*inch, bottomMargin=0.5*inch)
+    styles = getSampleStyleSheet()
+    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=7, leading=9)
+    header_style = ParagraphStyle("Header", parent=styles["Normal"], fontSize=7, leading=9, textColor=colors.white)
+    title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=16, spaceAfter=6)
+
+    elements = []
+    elements.append(Paragraph("AMLGuard — Audit Log Report", title_style))
+    elements.append(Paragraph(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}  |  Records: {len(logs)}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    data = [[
+        Paragraph("Timestamp", header_style),
+        Paragraph("User", header_style),
+        Paragraph("Role", header_style),
+        Paragraph("Action", header_style),
+        Paragraph("Module", header_style),
+        Paragraph("Record ID", header_style),
+        Paragraph("IP", header_style),
+    ]]
+    for log in logs:
+        ts = log.get("timestamp", "")[:19].replace("T", " ")
+        data.append([
+            Paragraph(ts, cell_style),
+            Paragraph(log.get("user_name", ""), cell_style),
+            Paragraph(log.get("user_role", ""), cell_style),
+            Paragraph(log.get("action_type", ""), cell_style),
+            Paragraph(log.get("module", ""), cell_style),
+            Paragraph(str(log.get("record_id", ""))[:20], cell_style),
+            Paragraph(log.get("ip_address", ""), cell_style),
+        ])
+
+    col_widths = [1.6*inch, 1.3*inch, 1.0*inch, 1.6*inch, 0.9*inch, 1.5*inch, 1.2*inch]
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0d1117")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#1e2530")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+
+    await log_audit(user["tenant_id"], user, "audit_log_exported", "audit", None, {"format": "pdf"}, request)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=audit_log_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"}
+    )
 
 # ===================================
 # CASE MANAGEMENT ROUTES

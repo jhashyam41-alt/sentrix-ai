@@ -9,6 +9,7 @@ import CustomersPage from "./pages/CustomersPage";
 import CustomerDetailPage from "./pages/CustomerDetailPage";
 import CasesListPage from "./pages/CasesListPage";
 import CaseDetailPage from "./pages/CaseDetailPage";
+import AuditLogPage from "./pages/AuditLogPage";
 import "@/App.css";
 
 // Protected Route wrapper
@@ -85,33 +86,7 @@ function ScreeningPage() {
 
 // CasesPage placeholder removed - using CasesListPage
 
-function AuditLogsPage() {
-  return (
-    <div>
-      <h1 style={{
-        fontSize: "26px",
-        fontWeight: "700",
-        letterSpacing: "-0.5px",
-        color: "#f1f5f9",
-        marginBottom: "8px"
-      }}>Audit Logs</h1>
-      <p style={{ color: "#94a3b8", fontSize: "14px" }}>
-        Immutable audit trail of all system activities
-      </p>
-      <div style={{
-        background: "#0d1117",
-        border: "1px solid #1e2530",
-        borderRadius: "12px",
-        padding: "60px 24px",
-        marginTop: "24px",
-        textAlign: "center",
-        color: "#475569"
-      }}>
-        Audit logs coming soon
-      </div>
-    </div>
-  );
-}
+// AuditLogsPage placeholder removed - using imported AuditLogPage
 
 function SettingsPage() {
   return (
@@ -220,7 +195,7 @@ function App() {
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <AuditLogsPage />
+                  <AuditLogPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }

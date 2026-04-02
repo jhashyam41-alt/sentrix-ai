@@ -29,6 +29,8 @@ export default function CustomerDetailPage() {
   const [adverseMedia, setAdverseMedia] = useState(null);
   const [screeningPEP, setScreeningPEP] = useState(false);
   const [screeningAdverseMedia, setScreeningAdverseMedia] = useState(false);
+  const [eddChecklist, setEddChecklist] = useState(null);
+  const [updatingCDD, setUpdatingCDD] = useState(false);
 
   useEffect(() => {
     fetchCustomer();
@@ -49,6 +51,11 @@ export default function CustomerDetailPage() {
       // Check if adverse media screening exists
       if (data.adverse_media_screening) {
         setAdverseMedia(data.adverse_media_screening);
+      }
+      
+      // Check if EDD checklist exists
+      if (data.edd_checklist) {
+        setEddChecklist(data.edd_checklist);
       }
     } catch (error) {
       console.error("Failed to fetch customer:", error);
@@ -101,6 +108,37 @@ export default function CustomerDetailPage() {
       await fetchCustomer(); // Refresh customer data
     } catch (error) {
       console.error("Failed to mark hit:", error);
+    }
+  };
+
+  const updateCDDStatus = async (status) => {
+    setUpdatingCDD(true);
+    try {
+      await axios.post(
+        `${API}/cdd/${id}/update-status`,
+        { cdd_status: status },
+        { withCredentials: true }
+      );
+      await fetchCustomer(); // Refresh customer data
+    } catch (error) {
+      console.error("Failed to update CDD status:", error);
+    } finally {
+      setUpdatingCDD(false);
+    }
+  };
+
+  const toggleEDDChecklistItem = async (item) => {
+    try {
+      const currentValue = eddChecklist?.[item] || false;
+      const { data } = await axios.post(
+        `${API}/cdd/${id}/edd-checklist`,
+        { item, checked: !currentValue },
+        { withCredentials: true }
+      );
+      setEddChecklist(data.edd_checklist);
+      await fetchCustomer(); // Refresh customer data
+    } catch (error) {
+      console.error("Failed to update EDD checklist:", error);
     }
   };
 
@@ -615,6 +653,259 @@ export default function CustomerDetailPage() {
                 <div style={{ color: "#475569", fontSize: "12px", marginTop: "8px" }}>
                   Last screened: {new Date(adverseMedia.screened_at).toLocaleString()}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* CDD/EDD Management */}
+          <div style={{
+            background: "#0d1117",
+            border: "1px solid #1e2530",
+            borderRadius: "12px",
+            padding: "24px",
+            marginTop: "24px"
+          }}>
+            <h2 style={{
+              fontSize: "13px",
+              fontWeight: "700",
+              color: "#f1f5f9",
+              marginBottom: "16px"
+            }}>CDD/EDD Management</h2>
+
+            {/* CDD Tier Info */}
+            <div style={{
+              background: "#080c12",
+              border: "1px solid #1e2530",
+              borderRadius: "8px",
+              padding: "16px",
+              marginBottom: "16px"
+            }}>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div style={{
+                    fontSize: "11px",
+                    color: "#475569",
+                    marginBottom: "6px",
+                    textTransform: "uppercase",
+                    letterSpacing: "1px"
+                  }}>CDD Tier (Auto-Assigned)</div>
+                  <div style={{
+                    fontSize: "16px",
+                    fontWeight: "700",
+                    color: customer.cdd_tier === "edd" ? "#ef4444" : customer.cdd_tier === "standard_cdd" ? "#f59e0b" : "#10b981",
+                    textTransform: "uppercase"
+                  }}>
+                    {customer.cdd_tier === "sdd" && "SDD - Simplified"}
+                    {customer.cdd_tier === "standard_cdd" && "Standard CDD"}
+                    {customer.cdd_tier === "edd" && "EDD - Enhanced"}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#475569", marginTop: "4px" }}>
+                    Based on risk score: {customer.risk_score}/100
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{
+                    fontSize: "11px",
+                    color: "#475569",
+                    marginBottom: "6px",
+                    textTransform: "uppercase",
+                    letterSpacing: "1px"
+                  }}>CDD Status</div>
+                  <span className={`status-badge status-${
+                    customer.cdd_status === "complete" || customer.cdd_status === "edd_complete" ? "success" :
+                    customer.cdd_status === "expired" || customer.cdd_status === "requires_edd" ? "danger" : "warning"
+                  }`} style={{ fontSize: "12px" }}>
+                    {customer.cdd_status?.replace("_", " ").toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {customer.cdd_review_date && (
+                <div className="grid grid-cols-2 gap-4 mt-4" style={{ paddingTop: "16px", borderTop: "1px solid #1e2530" }}>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#475569", marginBottom: "4px" }}>
+                      Review Date
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                      {new Date(customer.cdd_review_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#475569", marginBottom: "4px" }}>
+                      Expiry Date
+                    </div>
+                    <div style={{
+                      fontSize: "13px",
+                      color: customer.cdd_status === "expired" ? "#ef4444" : "#94a3b8",
+                      fontWeight: customer.cdd_status === "expired" ? "700" : "normal"
+                    }}>
+                      {customer.cdd_expiry_date ? new Date(customer.cdd_expiry_date).toLocaleDateString() : "Not set"}
+                      {customer.cdd_status === "expired" && " (EXPIRED)"}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* CDD Status Actions */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{
+                fontSize: "11px",
+                color: "#475569",
+                marginBottom: "8px",
+                textTransform: "uppercase",
+                letterSpacing: "1px"
+              }}>Update CDD Status</div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => updateCDDStatus("in_progress")}
+                  disabled={updatingCDD}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #1e2530",
+                    background: customer.cdd_status === "in_progress" ? "#2563eb" : "#080c12",
+                    color: customer.cdd_status === "in_progress" ? "#ffffff" : "#94a3b8",
+                    fontSize: "12px",
+                    fontWeight: customer.cdd_status === "in_progress" ? "700" : "500",
+                    cursor: updatingCDD ? "not-allowed" : "pointer"
+                  }}
+                >
+                  In Progress
+                </button>
+                <button
+                  onClick={() => updateCDDStatus("complete")}
+                  disabled={updatingCDD || customer.cdd_tier === "edd"}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #1e2530",
+                    background: customer.cdd_status === "complete" ? "#10b981" : "#080c12",
+                    color: customer.cdd_status === "complete" ? "#ffffff" : customer.cdd_tier === "edd" ? "#475569" : "#94a3b8",
+                    fontSize: "12px",
+                    fontWeight: customer.cdd_status === "complete" ? "700" : "500",
+                    cursor: (updatingCDD || customer.cdd_tier === "edd") ? "not-allowed" : "pointer"
+                  }}
+                >
+                  Complete
+                </button>
+                {customer.cdd_tier === "edd" && (
+                  <button
+                    onClick={() => updateCDDStatus("edd_in_progress")}
+                    disabled={updatingCDD}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      border: "1px solid #1e2530",
+                      background: customer.cdd_status === "edd_in_progress" ? "#f59e0b" : "#080c12",
+                      color: customer.cdd_status === "edd_in_progress" ? "#ffffff" : "#94a3b8",
+                      fontSize: "12px",
+                      fontWeight: customer.cdd_status === "edd_in_progress" ? "700" : "500",
+                      cursor: updatingCDD ? "not-allowed" : "pointer"
+                    }}
+                  >
+                    EDD In Progress
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* EDD Checklist */}
+            {customer.cdd_tier === "edd" && (
+              <div style={{
+                background: "#080c12",
+                border: "1px solid #1e2530",
+                borderRadius: "8px",
+                padding: "16px"
+              }}>
+                <div style={{
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  color: "#f1f5f9",
+                  marginBottom: "12px"
+                }}>EDD Checklist - Required Sign-Offs</div>
+
+                <div className="space-y-3">
+                  {[
+                    { key: "enhanced_sof_evidence", label: "Enhanced Source of Funds Evidence Collected" },
+                    { key: "enhanced_sow_evidence", label: "Enhanced Source of Wealth Evidence Collected" },
+                    { key: "senior_approval", label: "Senior Management Approval Obtained" },
+                    { key: "site_visit_conducted", label: "Site Visit or Video Call Conducted" },
+                    { key: "monitoring_frequency_set", label: "Ongoing Monitoring Frequency Set" },
+                    { key: "edd_report_signed_off", label: "EDD Report Drafted and Signed Off" }
+                  ].map((item, idx) => {
+                    const isChecked = eddChecklist?.[item.key] || false;
+                    return (
+                      <div
+                        key={item.key}
+                        onClick={() => toggleEDDChecklistItem(item.key)}
+                        style={{
+                          padding: "10px 12px",
+                          background: isChecked ? "rgba(16, 185, 129, 0.1)" : "#0d1117",
+                          border: `1px solid ${isChecked ? "#10b981" : "#1e2530"}`,
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                        data-testid={`edd-checklist-${idx}`}
+                        onMouseEnter={(e) => {
+                          if (!isChecked) {
+                            e.currentTarget.style.background = "#1e2530";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isChecked) {
+                            e.currentTarget.style.background = "#0d1117";
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div style={{
+                            width: "20px",
+                            height: "20px",
+                            borderRadius: "4px",
+                            border: `2px solid ${isChecked ? "#10b981" : "#475569"}`,
+                            background: isChecked ? "#10b981" : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "14px",
+                            color: "#ffffff",
+                            fontWeight: "700"
+                          }}>
+                            {isChecked && "✓"}
+                          </div>
+                          <span style={{
+                            fontSize: "13px",
+                            color: isChecked ? "#10b981" : "#f1f5f9",
+                            fontWeight: isChecked ? "600" : "400"
+                          }}>
+                            {item.label}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {eddChecklist && Object.values(eddChecklist).every(v => v === true) && (
+                  <div style={{
+                    marginTop: "12px",
+                    padding: "12px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    borderRadius: "6px",
+                    textAlign: "center"
+                  }}>
+                    <div style={{ color: "#10b981", fontSize: "13px", fontWeight: "700" }}>
+                      ✓ All EDD Requirements Complete
+                    </div>
+                    <div style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px" }}>
+                      Status automatically updated to EDD Complete
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

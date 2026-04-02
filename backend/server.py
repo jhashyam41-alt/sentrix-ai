@@ -29,6 +29,15 @@ from auth import (
 )
 from services.storage_service import init_storage, put_object, get_object, generate_upload_path
 
+# Helper function to auto-assign CDD tier based on risk score
+def auto_assign_cdd_tier(risk_score: int) -> str:
+    if risk_score <= 30:
+        return "sdd"
+    elif risk_score <= 65:
+        return "standard_cdd"
+    else:
+        return "edd"
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -705,6 +714,159 @@ async def get_audit_logs(
     }
 
 # ===================================
+# CDD MANAGEMENT ROUTES
+# ===================================
+
+@api_router.post("/cdd/{customer_id}/update-status")
+async def update_cdd_status(customer_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    
+    cdd_status = data.get("cdd_status")
+    valid_statuses = ["not_started", "in_progress", "complete", "expired", "requires_edd", "edd_in_progress", "edd_complete"]
+    
+    if cdd_status not in valid_statuses:
+        raise HTTPException(400, f"Invalid CDD status. Must be one of: {', '.join(valid_statuses)}")
+    
+    update_data = {
+        "cdd_status": cdd_status,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # If marking as complete, set review and expiry dates
+    if cdd_status == "complete" or cdd_status == "edd_complete":
+        risk_level = customer.get("risk_level", "medium")
+        review_date = datetime.now(timezone.utc)
+        
+        # Set expiry based on risk level
+        if risk_level == "low":
+            expiry_years = 3
+        elif risk_level == "medium":
+            expiry_years = 2
+        else:  # high or unacceptable
+            expiry_years = 1
+        
+        expiry_date = review_date + timedelta(days=365 * expiry_years)
+        
+        update_data["cdd_review_date"] = review_date.isoformat()
+        update_data["cdd_expiry_date"] = expiry_date.isoformat()
+    
+    await db.customers.update_one(
+        {"id": customer_id, "tenant_id": user["tenant_id"]},
+        {"$set": update_data}
+    )
+    
+    await log_audit(user["tenant_id"], user, "cdd_status_updated", "cdd", customer_id,
+                   {"new_status": cdd_status}, request)
+    
+    return {"message": "CDD status updated successfully", "cdd_status": cdd_status}
+
+@api_router.post("/cdd/{customer_id}/edd-checklist")
+async def update_edd_checklist(customer_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    
+    checklist_item = data.get("item")
+    checked = data.get("checked", False)
+    
+    # Get existing EDD checklist or create new
+    edd_checklist = customer.get("edd_checklist", {
+        "enhanced_sof_evidence": False,
+        "enhanced_sow_evidence": False,
+        "senior_approval": False,
+        "site_visit_conducted": False,
+        "monitoring_frequency_set": False,
+        "edd_report_signed_off": False
+    })
+    
+    if checklist_item not in edd_checklist:
+        raise HTTPException(400, "Invalid checklist item")
+    
+    edd_checklist[checklist_item] = checked
+    
+    # Check if all items are complete
+    all_complete = all(edd_checklist.values())
+    
+    update_data = {
+        "edd_checklist": edd_checklist,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # If all items complete, auto-update CDD status to edd_complete
+    if all_complete and customer.get("cdd_status") == "edd_in_progress":
+        update_data["cdd_status"] = "edd_complete"
+        
+        # Set expiry date (EDD customers are high risk = 1 year)
+        review_date = datetime.now(timezone.utc)
+        expiry_date = review_date + timedelta(days=365)
+        update_data["cdd_review_date"] = review_date.isoformat()
+        update_data["cdd_expiry_date"] = expiry_date.isoformat()
+    
+    await db.customers.update_one(
+        {"id": customer_id, "tenant_id": user["tenant_id"]},
+        {"$set": update_data}
+    )
+    
+    await log_audit(user["tenant_id"], user, "edd_checklist_updated", "cdd", customer_id,
+                   {"item": checklist_item, "checked": checked, "all_complete": all_complete}, request)
+    
+    return {
+        "message": "EDD checklist updated successfully",
+        "edd_checklist": edd_checklist,
+        "all_complete": all_complete
+    }
+
+@api_router.get("/cdd/expiring-reviews")
+async def get_expiring_reviews(request: Request, days: int = 30):
+    user = await get_current_user(request, db)
+    
+    # Calculate date 30 days from now
+    threshold_date = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    
+    # Find customers with expiring CDD reviews
+    expiring_customers = await db.customers.find({
+        "tenant_id": user["tenant_id"],
+        "cdd_expiry_date": {"$lte": threshold_date},
+        "cdd_status": {"$in": ["complete", "edd_complete"]}
+    }, {"_id": 0}).to_list(100)
+    
+    # Send email alerts for expiring reviews
+    from services.email_service import email_service
+    
+    if expiring_customers:
+        for customer in expiring_customers:
+            customer_name = customer.get("customer_data", {}).get("full_name") or customer.get("customer_data", {}).get("company_legal_name", "Customer")
+            expiry_date = customer.get("cdd_expiry_date")
+            
+            await email_service.send_email(
+                user.get("email"),
+                f"CDD Review Expiring Soon - {customer_name}",
+                f"""<html><body>
+                <h2>CDD Review Expiry Alert</h2>
+                <p>The CDD review for the following customer is expiring soon:</p>
+                <ul>
+                    <li><strong>Customer:</strong> {customer_name}</li>
+                    <li><strong>Customer ID:</strong> {customer.get('id')}</li>
+                    <li><strong>CDD Tier:</strong> {customer.get('cdd_tier', 'N/A').upper()}</li>
+                    <li><strong>Risk Level:</strong> {customer.get('risk_level', 'N/A').upper()}</li>
+                    <li><strong>Expiry Date:</strong> {expiry_date}</li>
+                </ul>
+                <p>Please schedule a CDD review renewal.</p>
+                </body></html>"""
+            )
+    
+    return {
+        "expiring_count": len(expiring_customers),
+        "customers": expiring_customers
+    }
+
+# ===================================
 # ADVERSE MEDIA SCREENING ROUTES
 # ===================================
 
@@ -806,12 +968,20 @@ async def mark_adverse_media_hit(customer_id: str, data: dict, request: Request)
     else:
         risk_level = "high"
     
+    # Auto-assign CDD tier
+    cdd_tier = auto_assign_cdd_tier(new_risk_score)
+    
     update_data = {
         "adverse_media_screening": adverse_media,
         "risk_score": new_risk_score,
         "risk_level": risk_level,
+        "cdd_tier": cdd_tier,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
+    
+    # If high risk and EDD required
+    if cdd_tier == "edd" and customer.get("cdd_status") not in ["edd_in_progress", "edd_complete"]:
+        update_data["cdd_status"] = "requires_edd"
     
     await db.customers.update_one(
         {"id": customer_id, "tenant_id": user["tenant_id"]},
@@ -875,6 +1045,9 @@ async def screen_pep(customer_id: str, request: Request):
         new_risk_score = min(customer.get("risk_score", 0) + pep_points, 100)
         update_data["risk_score"] = new_risk_score
         
+        # Auto-assign CDD tier based on risk score
+        update_data["cdd_tier"] = auto_assign_cdd_tier(new_risk_score)
+        
         # Determine risk level
         if new_risk_score <= 30:
             update_data["risk_level"] = "low"
@@ -882,8 +1055,9 @@ async def screen_pep(customer_id: str, request: Request):
             update_data["risk_level"] = "medium"
         else:
             update_data["risk_level"] = "high"
-            update_data["cdd_tier"] = "edd"
-            update_data["cdd_status"] = "requires_edd"
+            # High risk requires EDD
+            if update_data["cdd_tier"] == "edd" and customer.get("cdd_status") not in ["edd_in_progress", "edd_complete"]:
+                update_data["cdd_status"] = "requires_edd"
         
         # Send email alert to admin
         from services.email_service import email_service

@@ -26,7 +26,9 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pepScreening, setPepScreening] = useState(null);
+  const [adverseMedia, setAdverseMedia] = useState(null);
   const [screeningPEP, setScreeningPEP] = useState(false);
+  const [screeningAdverseMedia, setScreeningAdverseMedia] = useState(false);
 
   useEffect(() => {
     fetchCustomer();
@@ -42,6 +44,11 @@ export default function CustomerDetailPage() {
       // Check if PEP screening exists
       if (data.pep_screening) {
         setPepScreening(data.pep_screening);
+      }
+      
+      // Check if adverse media screening exists
+      if (data.adverse_media_screening) {
+        setAdverseMedia(data.adverse_media_screening);
       }
     } catch (error) {
       console.error("Failed to fetch customer:", error);
@@ -64,6 +71,36 @@ export default function CustomerDetailPage() {
       console.error("PEP screening failed:", error);
     } finally {
       setScreeningPEP(false);
+    }
+  };
+
+  const runAdverseMediaScreening = async () => {
+    setScreeningAdverseMedia(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/screening/adverse-media/${id}`,
+        {},
+        { withCredentials: true }
+      );
+      setAdverseMedia(data.adverse_media_screening);
+      await fetchCustomer(); // Refresh customer data
+    } catch (error) {
+      console.error("Adverse media screening failed:", error);
+    } finally {
+      setScreeningAdverseMedia(false);
+    }
+  };
+
+  const markAdverseMediaHit = async (hitId, relevance) => {
+    try {
+      await axios.post(
+        `${API}/screening/adverse-media/${id}/mark-hit`,
+        { hit_id: hitId, relevance },
+        { withCredentials: true }
+      );
+      await fetchCustomer(); // Refresh customer data
+    } catch (error) {
+      console.error("Failed to mark hit:", error);
     }
   };
 
@@ -358,6 +395,229 @@ export default function CustomerDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Adverse Media Screening Results */}
+          <div style={{
+            background: "#0d1117",
+            border: "1px solid #1e2530",
+            borderRadius: "12px",
+            padding: "24px",
+            marginTop: "24px"
+          }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 style={{
+                fontSize: "13px",
+                fontWeight: "700",
+                color: "#f1f5f9"
+              }}>Adverse Media Screening</h2>
+              <button
+                onClick={runAdverseMediaScreening}
+                disabled={screeningAdverseMedia}
+                style={{
+                  background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 12px rgba(37, 99, 235, 0.3)",
+                  color: "#ffffff",
+                  fontWeight: "600",
+                  padding: "8px 16px",
+                  border: "none",
+                  cursor: screeningAdverseMedia ? "not-allowed" : "pointer",
+                  fontSize: "13px"
+                }}
+                data-testid="run-adverse-media-btn"
+              >
+                {screeningAdverseMedia ? "Screening..." : "Screen News"}
+              </button>
+            </div>
+
+            {!adverseMedia ? (
+              <div style={{ textAlign: "center", padding: "40px 0", color: "#475569" }}>
+                <AlertTriangle className="w-12 h-12 mx-auto mb-4" />
+                <p>No adverse media screening results yet</p>
+                <p style={{ fontSize: "13px", marginTop: "8px" }}>
+                  Click "Screen News" to check for negative media coverage
+                </p>
+              </div>
+            ) : adverseMedia.has_hits ? (
+              <div>
+                {/* Alert */}
+                <div style={{
+                  background: "rgba(245, 158, 11, 0.1)",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  borderRadius: "8px",
+                  padding: "16px",
+                  marginBottom: "20px"
+                }}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <AlertTriangle className="w-5 h-5" style={{ color: "#f59e0b" }} />
+                    <span style={{ color: "#f59e0b", fontSize: "14px", fontWeight: "700" }}>
+                      ADVERSE MEDIA HITS FOUND
+                    </span>
+                  </div>
+                  <p style={{ color: "#fbbf24", fontSize: "13px" }}>
+                    {adverseMedia.hits.length} negative news {adverseMedia.hits.length === 1 ? 'article' : 'articles'} found. Review and mark relevance.
+                  </p>
+                </div>
+
+                {/* Hits List */}
+                <div className="space-y-3">
+                  {adverseMedia.hits.map((hit, idx) => (
+                    <div
+                      key={hit.id}
+                      style={{
+                        background: "#080c12",
+                        border: "1px solid #1e2530",
+                        borderRadius: "8px",
+                        padding: "16px"
+                      }}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div style={{
+                            fontSize: "14px",
+                            fontWeight: "600",
+                            color: "#f1f5f9",
+                            marginBottom: "6px"
+                          }}>
+                            {hit.headline}
+                          </div>
+                          <div style={{
+                            fontSize: "13px",
+                            color: "#94a3b8",
+                            marginBottom: "8px"
+                          }}>
+                            {hit.summary}
+                          </div>
+                          <div className="flex items-center gap-4" style={{ fontSize: "12px", color: "#475569" }}>
+                            <span>{hit.source}</span>
+                            <span>•</span>
+                            <span>{hit.publication_date}</span>
+                            <span>•</span>
+                            <span className="status-badge status-warning" style={{ fontSize: "10px" }}>
+                              {hit.category.replace("_", " ")}
+                            </span>
+                          </div>
+                        </div>
+                        {hit.link && (
+                          <a
+                            href={hit.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: "#2563eb",
+                              fontSize: "12px",
+                              marginLeft: "16px"
+                            }}
+                          >
+                            View Article →
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Relevance Marking */}
+                      <div style={{
+                        borderTop: "1px solid #1e2530",
+                        paddingTop: "12px",
+                        marginTop: "12px"
+                      }}>
+                        <div style={{
+                          fontSize: "11px",
+                          color: "#475569",
+                          marginBottom: "8px",
+                          textTransform: "uppercase",
+                          letterSpacing: "1px"
+                        }}>
+                          Mark Relevance
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => markAdverseMediaHit(hit.id, "relevant")}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              border: "1px solid #1e2530",
+                              background: hit.relevance === "relevant" ? "rgba(239, 68, 68, 0.2)" : "#080c12",
+                              color: hit.relevance === "relevant" ? "#ef4444" : "#94a3b8",
+                              fontSize: "12px",
+                              fontWeight: hit.relevance === "relevant" ? "700" : "500",
+                              cursor: "pointer",
+                              transition: "all 0.2s"
+                            }}
+                            data-testid={`mark-relevant-${idx}`}
+                          >
+                            ✓ Relevant
+                          </button>
+                          <button
+                            onClick={() => markAdverseMediaHit(hit.id, "not_relevant")}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              border: "1px solid #1e2530",
+                              background: hit.relevance === "not_relevant" ? "rgba(16, 185, 129, 0.2)" : "#080c12",
+                              color: hit.relevance === "not_relevant" ? "#10b981" : "#94a3b8",
+                              fontSize: "12px",
+                              fontWeight: hit.relevance === "not_relevant" ? "700" : "500",
+                              cursor: "pointer",
+                              transition: "all 0.2s"
+                            }}
+                            data-testid={`mark-not-relevant-${idx}`}
+                          >
+                            ✗ Not Relevant
+                          </button>
+                          <button
+                            onClick={() => markAdverseMediaHit(hit.id, "under_review")}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "6px",
+                              border: "1px solid #1e2530",
+                              background: hit.relevance === "under_review" ? "rgba(245, 158, 11, 0.2)" : "#080c12",
+                              color: hit.relevance === "under_review" ? "#f59e0b" : "#94a3b8",
+                              fontSize: "12px",
+                              fontWeight: hit.relevance === "under_review" ? "700" : "500",
+                              cursor: "pointer",
+                              transition: "all 0.2s"
+                            }}
+                            data-testid={`mark-under-review-${idx}`}
+                          >
+                            ⧗ Under Review
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{
+                  marginTop: "16px",
+                  padding: "12px",
+                  background: "#080c12",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  color: "#475569"
+                }}>
+                  Last screened: {new Date(adverseMedia.screened_at).toLocaleString()}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: "rgba(16, 185, 129, 0.1)",
+                border: "1px solid rgba(16, 185, 129, 0.3)",
+                borderRadius: "8px",
+                padding: "20px",
+                textAlign: "center"
+              }}>
+                <div style={{ color: "#10b981", fontSize: "14px", fontWeight: "700", marginBottom: "4px" }}>
+                  ✓ NO ADVERSE MEDIA
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                  No negative news coverage found
+                </div>
+                <div style={{ color: "#475569", fontSize: "12px", marginTop: "8px" }}>
+                  Last screened: {new Date(adverseMedia.screened_at).toLocaleString()}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -445,6 +705,12 @@ export default function CustomerDetailPage() {
                 <span style={{ fontSize: "13px", color: "#94a3b8" }}>PEP</span>
                 <span className={`status-badge status-${pepScreening?.is_pep ? "danger" : "success"}`}>
                   {pepScreening?.is_pep ? "Match" : "No Match"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ fontSize: "13px", color: "#94a3b8" }}>Adverse Media</span>
+                <span className={`status-badge status-${adverseMedia?.has_hits ? "warning" : "success"}`}>
+                  {adverseMedia?.has_hits ? `${adverseMedia.hits.length} Hits` : "No Hits"}
                 </span>
               </div>
             </div>

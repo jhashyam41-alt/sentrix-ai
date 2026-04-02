@@ -705,6 +705,125 @@ async def get_audit_logs(
     }
 
 # ===================================
+# ADVERSE MEDIA SCREENING ROUTES
+# ===================================
+
+@api_router.post("/screening/adverse-media/{customer_id}")
+async def screen_adverse_media(customer_id: str, request: Request):
+    user = await get_current_user(request, db)
+    
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    
+    # Import screening service
+    from services.screening_service import screening_service
+    
+    customer_data = customer.get("customer_data", {})
+    adverse_media_result = await screening_service.screen_adverse_media(customer_data)
+    
+    # Store adverse media screening result
+    screening_doc = {
+        "id": str(uuid.uuid4()),
+        "customer_id": customer_id,
+        "tenant_id": user["tenant_id"],
+        **adverse_media_result,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.adverse_media_screenings.insert_one(screening_doc)
+    
+    # Update customer with adverse media status
+    update_data = {
+        "adverse_media_screening": adverse_media_result,
+        "adverse_media_status": "hits_found" if adverse_media_result.get("has_hits") else "no_hits",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.customers.update_one(
+        {"id": customer_id, "tenant_id": user["tenant_id"]},
+        {"$set": update_data}
+    )
+    
+    await log_audit(user["tenant_id"], user, "adverse_media_screening_run", "screening", customer_id, 
+                   {"has_hits": adverse_media_result.get("has_hits"), "hit_count": len(adverse_media_result.get("hits", []))}, request)
+    
+    return {"message": "Adverse media screening completed", "adverse_media_screening": adverse_media_result}
+
+@api_router.post("/screening/adverse-media/{customer_id}/mark-hit")
+async def mark_adverse_media_hit(customer_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+    
+    hit_id = data.get("hit_id")
+    relevance = data.get("relevance")  # relevant, not_relevant, under_review
+    
+    if relevance not in ["relevant", "not_relevant", "under_review"]:
+        raise HTTPException(400, "Invalid relevance value")
+    
+    # Update the hit in adverse media screening
+    adverse_media = customer.get("adverse_media_screening", {})
+    hits = adverse_media.get("hits", [])
+    
+    hit_updated = False
+    for hit in hits:
+        if hit.get("id") == hit_id:
+            hit["relevance"] = relevance
+            hit["reviewed_by"] = user["id"]
+            hit["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+            hit_updated = True
+            break
+    
+    if not hit_updated:
+        raise HTTPException(404, "Hit not found")
+    
+    adverse_media["hits"] = hits
+    
+    # Calculate relevant hits count
+    relevant_count = sum(1 for h in hits if h.get("relevance") == "relevant")
+    
+    # Update risk score if marked as relevant
+    current_risk_score = customer.get("risk_score", 0)
+    
+    if relevance == "relevant":
+        # Add 15 points per relevant hit, max 45 points total from adverse media
+        adverse_media_points = min(relevant_count * 15, 45)
+        # Recalculate total score
+        new_risk_score = min(current_risk_score + 15, 100)
+    else:
+        # Recalculate based on all relevant hits
+        adverse_media_points = min(relevant_count * 15, 45)
+        new_risk_score = current_risk_score
+    
+    # Determine risk level
+    if new_risk_score <= 30:
+        risk_level = "low"
+    elif new_risk_score <= 65:
+        risk_level = "medium"
+    else:
+        risk_level = "high"
+    
+    update_data = {
+        "adverse_media_screening": adverse_media,
+        "risk_score": new_risk_score,
+        "risk_level": risk_level,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.customers.update_one(
+        {"id": customer_id, "tenant_id": user["tenant_id"]},
+        {"$set": update_data}
+    )
+    
+    await log_audit(user["tenant_id"], user, "adverse_media_hit_marked", "screening", customer_id,
+                   {"hit_id": hit_id, "relevance": relevance, "new_risk_score": new_risk_score}, request)
+    
+    return {"message": "Hit marked successfully", "risk_score": new_risk_score}
+
+# ===================================
 # PEP SCREENING ROUTES
 # ===================================
 

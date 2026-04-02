@@ -91,9 +91,9 @@ async def create_default_tenant(db):
 
 async def create_admin_user(db, tenant_id):
     """Create or update admin user"""
-    # Create shyam@sentrixai.com admin
-    sentrix_email = "shyam@sentrixai.com"
-    sentrix_password = "Sentrix@2024"
+    # Create shyam@sentrixai.com admin from environment variables
+    sentrix_email = os.environ.get("SENTRIX_ADMIN_EMAIL", "shyam@sentrixai.com")
+    sentrix_password = os.environ.get("SENTRIX_ADMIN_PASSWORD", "Sentrix@2024")
     
     sentrix_user = await db.users.find_one({"email": sentrix_email})
     if sentrix_user is None:

@@ -1,0 +1,171 @@
+{
+  "theme": "dark",
+  "archetype": "Swiss & High-Contrast (Authority, Clarity, Truth) - Dark Finance Variant",
+  "domain": "AML/KYC SaaS Platform",
+  "typography": {
+    "font_family": "DM Sans, sans-serif",
+    "hierarchy": {
+      "page_titles": {
+        "size": "26px",
+        "font_weight": "700",
+        "letter_spacing": "-0.5px",
+        "color": "#f1f5f9"
+      },
+      "section_labels": {
+        "size": "10px",
+        "font_weight": "600",
+        "text_transform": "uppercase",
+        "letter_spacing": "2px",
+        "color": "#2563eb"
+      },
+      "card_titles": {
+        "size": "13px",
+        "font_weight": "700",
+        "color": "#f1f5f9"
+      },
+      "table_headers": {
+        "size": "10px",
+        "font_weight": "600",
+        "text_transform": "uppercase",
+        "color": "#475569"
+      },
+      "body_primary": {
+        "size": "14px",
+        "font_weight": "400",
+        "color": "#f1f5f9"
+      },
+      "body_secondary": {
+        "size": "13px",
+        "font_weight": "400",
+        "color": "#94a3b8"
+      },
+      "body_muted": {
+        "size": "12px",
+        "font_weight": "400",
+        "color": "#475569"
+      }
+    }
+  },
+  "colors": {
+    "background_main": "#080c12",
+    "background_cards_sidebar": "#0d1117",
+    "borders": "#1e2530",
+    "primary_accent": "#2563eb",
+    "text_primary": "#f1f5f9",
+    "text_secondary": "#94a3b8",
+    "text_muted": "#475569",
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "danger": "#ef4444",
+    "nav_active_bg_start": "#1e3a5f",
+    "nav_active_bg_end": "#1e2d45"
+  },
+  "component_styles": {
+    "cards": {
+      "background": "#0d1117",
+      "border": "1px solid #1e2530",
+      "border_radius": "12px",
+      "padding": "24px",
+      "shadow": "none"
+    },
+    "buttons_primary": {
+      "background": "linear-gradient(135deg, #2563eb, #1d4ed8)",
+      "border_radius": "8px",
+      "box_shadow": "0 4px 12px rgba(37, 99, 235, 0.3)",
+      "color": "#ffffff",
+      "font_weight": "600"
+    },
+    "buttons_secondary": {
+      "background": "transparent",
+      "border": "1px solid #1e2530",
+      "border_radius": "8px",
+      "color": "#f1f5f9"
+    },
+    "inputs": {
+      "background": "#080c12",
+      "border": "1px solid #1e2530",
+      "border_radius": "8px",
+      "color": "#f1f5f9",
+      "padding": "8px 12px"
+    },
+    "status_badges": {
+      "success": {
+        "color": "#10b981",
+        "background": "rgba(16, 185, 129, 0.18)",
+        "font_weight": "700",
+        "border_radius": "4px",
+        "padding": "4px 8px",
+        "font_size": "11px"
+      },
+      "warning": {
+        "color": "#f59e0b",
+        "background": "rgba(245, 158, 11, 0.18)",
+        "font_weight": "700",
+        "border_radius": "4px",
+        "padding": "4px 8px",
+        "font_size": "11px"
+      },
+      "danger": {
+        "color": "#ef4444",
+        "background": "rgba(239, 68, 68, 0.18)",
+        "font_weight": "700",
+        "border_radius": "4px",
+        "padding": "4px 8px",
+        "font_size": "11px"
+      }
+    },
+    "tables": {
+      "row_separator": "1px solid #0f1520",
+      "heavy_borders": false
+    },
+    "sidebar": {
+      "width": "220px",
+      "background": "#0d1117",
+      "border_right": "1px solid #1e2530",
+      "nav_item_active": {
+        "border_left": "3px solid #2563eb",
+        "background": "linear-gradient(90deg, #1e3a5f, #1e2d45)"
+      }
+    }
+  },
+  "layout_and_spacing": {
+    "grid_strategy": "Control Room Pattern",
+    "base_padding": "24px",
+    "dense_metrics": true,
+    "containers": {
+      "internal_padding": "p-6"
+    }
+  },
+  "motion_and_interaction": {
+    "hover_states": "Subtle opacity and background lightening on interactive elements.",
+    "button_hover": "Slight brightness increase to linear gradient and scale up (1.02).",
+    "transitions": "all 0.2s ease-in-out",
+    "sidebar_nav_hover": "background #1e2530 transition."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/0c41707c-e5b3-476b-8885-4b577d5b6e55/images/dc0ceac10d649b591b1ae3d110db90bd1f36418befdde8c0706f48327addb9cc.png",
+        "description": "Abstract, dark, futuristic tech background featuring glowing deep blue nodes and networks.",
+        "category": "login_background"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1673813497649-9b1ff22e6185?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNzl8MHwxfHNlYXJjaHwyfHxmaW5hbmNlJTIwZGFzaGJvYXJkJTIwYWJzdHJhY3QlMjBibHVlfGVufDB8fHx8MTc3NTEyOTI1N3ww&ixlib=rb-4.1.0&q=85",
+        "description": "A close up of a blue and white abstract pattern",
+        "category": "abstract_accent"
+      }
+    ]
+  },
+  "icons_library": "lucide-react",
+  "instructions_to_main_agent": [
+    "Ensure all fonts are imported properly (DM Sans).",
+    "Apply precise hex codes exactly as specified in the component_styles and colors sections. The background MUST be #080c12.",
+    "Apply linear gradients accurately to primary buttons.",
+    "Implement the specific typography sizing and letter spacing down to the pixel for headers and labels.",
+    "Maintain high density 'Control Room' bento grid layouts for the Dashboard.",
+    "Ensure the sidebar width is exactly 220px, and the active nav item style matches exactly: border-left blue and linear gradient background.",
+    "Do not use heavy borders on tables, use exact 1px #0f1520.",
+    "Badge opacity must be 18% as requested.",
+    "Add data-testid attributes to ALL interactive elements."
+  ]
+}

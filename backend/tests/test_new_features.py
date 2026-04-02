@@ -12,9 +12,9 @@ import time
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://risk-screening.preview.emergentagent.com').rstrip('/')
 
-# Test credentials
-TEST_EMAIL = "shyam@sentrixai.com"
-TEST_PASSWORD = "Sentrix@2024"
+# Test credentials from environment
+TEST_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', 'shyam@sentrixai.com')
+TEST_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', 'Sentrix@2024')
 
 
 class TestAuth:

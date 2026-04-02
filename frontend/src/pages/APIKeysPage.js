@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import logger from "../utils/logger";
 import { Key, Plus, Trash2, Copy, Check, Activity, Loader2 } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -24,7 +25,7 @@ export default function APIKeysPage() {
       setKeys(keysRes.data.api_keys || []);
       setUsage(usageRes.data);
     } catch (err) {
-      console.error("Failed to fetch API keys:", err);
+      logger.error("Failed to fetch API keys:", err);
     } finally {
       setLoading(false);
     }
@@ -48,7 +49,7 @@ export default function APIKeysPage() {
       setShowCreate(false);
       await fetchKeys();
     } catch (err) {
-      console.error("Failed to create key:", err);
+      logger.error("Failed to create key:", err);
     } finally {
       setCreating(false);
     }
@@ -60,7 +61,7 @@ export default function APIKeysPage() {
       await axios.put(`${API}/api-keys/${keyId}/revoke`, {}, { withCredentials: true });
       await fetchKeys();
     } catch (err) {
-      console.error("Failed to revoke key:", err);
+      logger.error("Failed to revoke key:", err);
     }
   };
 

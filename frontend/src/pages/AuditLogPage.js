@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import logger from "../utils/logger";
 import { FileText, Download } from "lucide-react";
 import { AuditLogFilters } from "../components/audit/AuditLogFilters";
 import { AuditLogTable } from "../components/audit/AuditLogTable";
@@ -23,7 +24,7 @@ export default function AuditLogPage() {
       const { data } = await axios.get(`${API}/audit-logs/filters`, { withCredentials: true });
       setFilterOptions(data);
     } catch (err) {
-      console.error("Failed to fetch filter options:", err);
+      logger.error("Failed to fetch filter options:", err);
     }
   }, []);
 
@@ -43,7 +44,7 @@ export default function AuditLogPage() {
       setLogs(data.logs || []);
       setTotal(data.total || 0);
     } catch (err) {
-      console.error("Failed to fetch audit logs:", err);
+      logger.error("Failed to fetch audit logs:", err);
     } finally {
       setLoading(false);
     }
@@ -85,7 +86,7 @@ export default function AuditLogPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error(`Export ${format} failed:`, err);
+      logger.error(`Export ${format} failed:`, err);
     } finally {
       setExporting(null);
     }

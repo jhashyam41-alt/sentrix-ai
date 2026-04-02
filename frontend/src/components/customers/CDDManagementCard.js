@@ -9,6 +9,25 @@ const EDD_ITEMS = [
   { key: "edd_report_signed_off", label: "EDD Report Drafted and Signed Off" },
 ];
 
+const getCDDTierColor = (tier) => {
+  if (tier === "edd") return "#ef4444";
+  if (tier === "standard_cdd") return "#f59e0b";
+  return "#10b981";
+};
+
+const getCDDTierLabel = (tier) => {
+  if (tier === "sdd") return "SDD - Simplified";
+  if (tier === "standard_cdd") return "Standard CDD";
+  if (tier === "edd") return "EDD - Enhanced";
+  return tier;
+};
+
+const getCDDStatusBadge = (status) => {
+  if (status === "complete" || status === "edd_complete") return "success";
+  if (status === "expired" || status === "requires_edd") return "danger";
+  return "warning";
+};
+
 export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdateCDDStatus, onToggleEDDItem }) => (
   <div style={{
     background: "#0d1117",
@@ -31,12 +50,10 @@ export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdat
           <div style={{
             fontSize: "16px",
             fontWeight: "700",
-            color: customer.cdd_tier === "edd" ? "#ef4444" : customer.cdd_tier === "standard_cdd" ? "#f59e0b" : "#10b981",
+            color: getCDDTierColor(customer.cdd_tier),
             textTransform: "uppercase"
           }}>
-            {customer.cdd_tier === "sdd" && "SDD - Simplified"}
-            {customer.cdd_tier === "standard_cdd" && "Standard CDD"}
-            {customer.cdd_tier === "edd" && "EDD - Enhanced"}
+            {getCDDTierLabel(customer.cdd_tier)}
           </div>
           <div style={{ fontSize: "11px", color: "#475569", marginTop: "4px" }}>
             Based on risk score: {customer.risk_score}/100
@@ -45,10 +62,7 @@ export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdat
 
         <div>
           <div style={{ fontSize: "11px", color: "#475569", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1px" }}>CDD Status</div>
-          <span className={`status-badge status-${
-            customer.cdd_status === "complete" || customer.cdd_status === "edd_complete" ? "success" :
-            customer.cdd_status === "expired" || customer.cdd_status === "requires_edd" ? "danger" : "warning"
-          }`} style={{ fontSize: "12px" }}>
+          <span className={`status-badge status-${getCDDStatusBadge(customer.cdd_status)}`} style={{ fontSize: "12px" }}>
             {customer.cdd_status?.replace("_", " ").toUpperCase()}
           </span>
         </div>
@@ -65,7 +79,7 @@ export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdat
             <div style={{
               fontSize: "13px",
               color: customer.cdd_status === "expired" ? "#ef4444" : "#94a3b8",
-              fontWeight: customer.cdd_status === "expired" ? "700" : "normal"
+              fontWeight: customer.cdd_status === "expired" ? 700 : "normal"
             }}>
               {customer.cdd_expiry_date ? new Date(customer.cdd_expiry_date).toLocaleDateString() : "Not set"}
               {customer.cdd_status === "expired" && " (EXPIRED)"}

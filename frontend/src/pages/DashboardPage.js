@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import logger from "../utils/logger";
 import { Users, AlertCircle, FileSearch, TrendingUp, ShieldCheck, Activity, Key, Shield } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -21,7 +22,7 @@ export default function DashboardPage() {
       const { data } = await axios.get(`${API}/dashboard/stats`, { withCredentials: true });
       setStats(data);
     } catch (error) {
-      console.error("Failed to fetch stats:", error);
+      logger.error("Failed to fetch stats:", error);
     } finally {
       setLoading(false);
     }

@@ -10,11 +10,11 @@ router = APIRouter(prefix="/api/api-keys", tags=["API Keys"])
 
 
 async def _get_deps(request: Request):
-    from server import get_current_user, db, log_audit
-    user = await get_current_user(request, db)
+    from shared.deps import get_current_user, get_db, log_audit
+    user = await get_current_user(request)
     if user["role"] != "super_admin":
         raise HTTPException(403, "Only super admins can manage API keys")
-    return db, user, log_audit
+    return get_db(), user, log_audit
 
 
 @router.get("")

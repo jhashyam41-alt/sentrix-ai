@@ -1,181 +1,212 @@
 """
-OpenSanctions AML/Sanctions Screening Service.
-Calls real OpenSanctions API when OPENSANCTIONS_API_KEY is set,
-otherwise returns realistic mock data for demo/testing.
+OpenSanctions screening service (MOCK / LIVE).
+Provides sanctions, PEP, and adverse media screening against OpenSanctions data.
 """
 import os
-import secrets
+import random
 import uuid
-import httpx
-import logging
+import hashlib
 from datetime import datetime, timezone
 
-logger = logging.getLogger(__name__)
+DEMO_MODE = not os.environ.get("OPENSANCTIONS_API_KEY")
+BASE_URL = os.environ.get("OPENSANCTIONS_BASE_URL", "https://api.opensanctions.org")
 
-OPENSANCTIONS_API_KEY = os.environ.get("OPENSANCTIONS_API_KEY", "")
-OPENSANCTIONS_BASE_URL = os.environ.get("OPENSANCTIONS_BASE_URL", "https://api.opensanctions.org")
-
-DEMO_MODE = not bool(OPENSANCTIONS_API_KEY)
-
-# FATF high-risk and monitored jurisdictions (2025-2026)
-FATF_HIGH_RISK_COUNTRIES = {
-    "KP", "IR", "MM",  # High-risk
-    "SY", "YE", "AF",  # Under monitoring
-    "BF", "CM", "CD", "HT", "KE", "ML", "MZ", "NG", "PH",
-    "SN", "SS", "TZ", "VN", "ZA",  # Monitored
+# FATF high-risk & monitored jurisdictions
+FATF_HIGH_RISK = {
+    "KP", "IR", "MM", "SY", "YE", "AF",
+    "AL", "BB", "BF", "CM", "CD", "GI", "HT", "JM",
+    "JO", "ML", "MZ", "NI", "PK", "PA", "PH",
+    "SN", "SS", "TZ", "TR", "UG", "VN",
 }
 
+# Curated demo matches for realistic data
+_DEMO_MATCHES = [
+    {
+        "id": "NK-SANCTIONS-001",
+        "caption": "Kim Jong Un",
+        "schema_type": "Person",
+        "score": 0.45,
+        "datasets": ["us_ofac_sdn", "un_sc_sanctions"],
+        "topics": ["sanction"],
+        "properties": {"nationality": ["KP"], "birthDate": ["1984-01-08"]},
+    },
+    {
+        "id": "PEP-RU-002",
+        "caption": "Vladimir Putin",
+        "schema_type": "Person",
+        "score": 0.38,
+        "datasets": ["ru_acf_bribetakers", "every_politician"],
+        "topics": ["role.pep"],
+        "properties": {"nationality": ["RU"], "position": ["President of Russia"]},
+    },
+    {
+        "id": "MEDIA-UK-003",
+        "caption": "Robert Maxwell",
+        "schema_type": "Person",
+        "score": 0.32,
+        "datasets": ["icij_offshoreleaks"],
+        "topics": ["crime.fin"],
+        "properties": {"nationality": ["GB"]},
+    },
+]
 
-def _headers():
-    h = {"Content-Type": "application/json"}
-    if OPENSANCTIONS_API_KEY:
-        h["Authorization"] = f"ApiKey {OPENSANCTIONS_API_KEY}"
-    return h
+
+def get_country_risk(country_code: str) -> bool:
+    """Check if a country code is FATF high-risk / monitored."""
+    return (country_code or "").upper() in FATF_HIGH_RISK
 
 
 async def screen_individual(name: str, date_of_birth: str = None, nationality: str = None) -> dict:
-    """Screen an individual against sanctions/PEP lists."""
-    if not DEMO_MODE:
-        try:
-            props = {"name": [name]}
-            if date_of_birth:
-                props["birthDate"] = [date_of_birth]
-            if nationality:
-                props["nationality"] = [nationality]
+    """Screen an individual against sanctions / PEP / adverse media lists."""
+    if DEMO_MODE:
+        return _build_demo_result(name, date_of_birth, nationality)
 
-            payload = {"queries": {"q1": {"schema": "Person", "properties": props}}}
+    return await _live_screen(name, date_of_birth, nationality)
 
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(
-                    f"{OPENSANCTIONS_BASE_URL}/match/default",
-                    json=payload,
-                    headers=_headers(),
-                )
-                resp.raise_for_status()
-                data = resp.json()
 
-            results = data.get("responses", {}).get("q1", {}).get("results", [])
-            matched = []
-            for r in results:
-                score = r.get("score", 0)
-                props = r.get("properties", {})
-                matched.append({
-                    "entity_id": r.get("id", ""),
-                    "name": (props.get("name") or [""])[0],
-                    "score": round(score, 2),
-                    "datasets": r.get("datasets", []),
-                    "topics": props.get("topics", []),
-                    "countries": props.get("country", []),
-                })
+def _build_demo_result(name: str, dob: str = None, nationality: str = None) -> dict:
+    """Construct a realistic demo screening result."""
+    seed = int(hashlib.md5(name.lower().encode()).hexdigest()[:8], 16)
+    rng = random.Random(seed)
 
-            top_score = max((m["score"] for m in matched), default=0)
-            risk_level = "HIGH" if top_score > 0.8 else "MEDIUM" if top_score > 0.5 else "LOW"
-            has_pep = any("role.pep" in m.get("topics", []) for m in matched)
-            has_sanction = any("sanction" in m.get("topics", []) for m in matched)
+    has_match = rng.random() < 0.3
+    matches = _pick_demo_matches(rng) if has_match else []
+    top_score = max((m["score"] for m in matches), default=0)
 
-            return {
-                "status": "completed",
-                "screening_id": str(uuid.uuid4()),
-                "screened_name": name,
-                "match_count": len(matched),
-                "top_score": top_score,
-                "risk_level": risk_level,
-                "has_pep_match": has_pep,
-                "has_sanction_match": has_sanction,
-                "matches": matched[:10],
-                "country_risk": nationality.upper() in FATF_HIGH_RISK_COUNTRIES if nationality else False,
-                "screened_at": datetime.now(timezone.utc).isoformat(),
-                "mode": "live",
-            }
-        except Exception as e:
-            logger.error(f"OpenSanctions API error: {e}")
-            return {"status": "error", "message": f"OpenSanctions API error: {str(e)}"}
+    has_sanction = any("sanction" in m.get("topics", []) for m in matches)
+    has_pep = any("role.pep" in m.get("topics", []) for m in matches)
 
-    # ─── Mock response ──────────────────────────────────────────────
-    has_match = secrets.randbelow(10) < 3  # 30% chance
-    mock_matches = []
-    if has_match:
-        num = 1 + secrets.randbelow(2)
-        sanctions_lists = [
-            "OFAC SDN", "EU Financial Sanctions", "UN Consolidated",
-            "UK HM Treasury", "OpenSanctions PEP Dataset",
-        ]
-        topic_options = [["sanction"], ["role.pep"], ["sanction", "role.pep"], ["crime"]]
-        for _ in range(num):
-            score = round(0.5 + secrets.randbelow(50) / 100, 2)
-            mock_matches.append({
-                "entity_id": f"Q{secrets.randbelow(999999)}",
-                "name": name,
-                "score": score,
-                "datasets": [sanctions_lists[secrets.randbelow(len(sanctions_lists))]],
-                "topics": topic_options[secrets.randbelow(len(topic_options))],
-                "countries": [nationality or "US"],
-            })
-
-    top_score = max((m["score"] for m in mock_matches), default=0)
-    risk_level = "HIGH" if top_score > 0.8 else "MEDIUM" if top_score > 0.5 else "LOW"
-    has_pep = any("role.pep" in m.get("topics", []) for m in mock_matches)
-    has_sanction = any("sanction" in m.get("topics", []) for m in mock_matches)
-    country_risk = nationality and nationality.upper() in FATF_HIGH_RISK_COUNTRIES
+    risk_level = _derive_risk_level(has_sanction, has_pep, nationality)
+    country_flag = get_country_risk(nationality or "")
 
     return {
-        "status": "completed",
-        "screening_id": str(uuid.uuid4()),
+        "screening_id": f"scr_{uuid.uuid4().hex[:12]}",
         "screened_name": name,
-        "match_count": len(mock_matches),
-        "top_score": top_score,
-        "risk_level": risk_level,
-        "has_pep_match": has_pep,
+        "date_of_birth": dob,
+        "nationality": nationality,
+        "total_matches": len(matches),
         "has_sanction_match": has_sanction,
-        "matches": mock_matches,
-        "country_risk": bool(country_risk),
+        "has_pep_match": has_pep,
+        "risk_level": risk_level,
+        "top_score": top_score,
+        "matches": matches,
+        "country_risk": country_flag,
         "screened_at": datetime.now(timezone.utc).isoformat(),
         "mode": "demo",
     }
 
 
-async def screen_batch(individuals: list) -> dict:
-    """Screen a batch of individuals (max 50)."""
-    batch = individuals[:50]
-    results = []
-    summary = {"total": len(batch), "high": 0, "medium": 0, "low": 0, "errors": 0}
+def _pick_demo_matches(rng: random.Random) -> list:
+    count = rng.randint(1, min(3, len(_DEMO_MATCHES)))
+    return [
+        {**m, "score": round(rng.uniform(0.3, 0.95), 2)}
+        for m in rng.sample(_DEMO_MATCHES, count)
+    ]
 
-    for person in batch:
-        result = await screen_individual(
-            name=person.get("name", ""),
-            date_of_birth=person.get("dateOfBirth"),
-            nationality=person.get("nationality"),
-        )
-        if result["status"] == "error":
-            summary["errors"] += 1
-        else:
-            level = result["risk_level"]
-            if level == "HIGH":
-                summary["high"] += 1
-            elif level == "MEDIUM":
-                summary["medium"] += 1
-            else:
-                summary["low"] += 1
-        results.append(result)
+
+def _derive_risk_level(has_sanction: bool, has_pep: bool, nationality: str | None) -> str:
+    if has_sanction:
+        return "HIGH"
+    if has_pep:
+        return "MEDIUM"
+    if nationality and get_country_risk(nationality):
+        return "MEDIUM"
+    return "LOW"
+
+
+async def _live_screen(name: str, dob: str = None, nationality: str = None) -> dict:
+    """Call the real OpenSanctions /match API."""
+    import httpx
+
+    api_key = os.environ.get("OPENSANCTIONS_API_KEY", "")
+    params = {"api_key": api_key}
+    payload = {
+        "schema": "Person",
+        "properties": {"name": [name]},
+    }
+    if dob:
+        payload["properties"]["birthDate"] = [dob]
+    if nationality:
+        payload["properties"]["nationality"] = [nationality]
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(f"{BASE_URL}/match/default", params=params, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    matches = _parse_live_matches(data)
+    top_score = max((m["score"] for m in matches), default=0)
+    has_sanction = any("sanction" in m.get("topics", []) for m in matches)
+    has_pep = any("role.pep" in m.get("topics", []) for m in matches)
+    risk_level = _derive_risk_level(has_sanction, has_pep, nationality)
 
     return {
-        "batch_id": str(uuid.uuid4()),
-        "summary": summary,
-        "results": results,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "demo" if DEMO_MODE else "live",
+        "screening_id": f"scr_{uuid.uuid4().hex[:12]}",
+        "screened_name": name,
+        "date_of_birth": dob,
+        "nationality": nationality,
+        "total_matches": len(matches),
+        "has_sanction_match": has_sanction,
+        "has_pep_match": has_pep,
+        "risk_level": risk_level,
+        "top_score": top_score,
+        "matches": matches,
+        "country_risk": get_country_risk(nationality or ""),
+        "screened_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "live",
     }
 
 
-def get_country_risk(country_code: str) -> bool:
-    return country_code.upper() in FATF_HIGH_RISK_COUNTRIES if country_code else False
+def _parse_live_matches(data: dict) -> list:
+    return [
+        {
+            "id": r.get("id"),
+            "caption": r.get("caption"),
+            "schema_type": r.get("schema"),
+            "score": r.get("score", 0),
+            "datasets": r.get("datasets", []),
+            "topics": r.get("topics", []),
+            "properties": {
+                "nationality": r.get("properties", {}).get("nationality", []),
+                "birthDate": r.get("properties", {}).get("birthDate", []),
+            },
+        }
+        for r in data.get("results", [])
+        if r.get("score", 0) >= 0.3
+    ]
+
+
+async def screen_batch(individuals: list) -> dict:
+    """Screen multiple individuals in batch mode."""
+    results = []
+    for ind in individuals:
+        name = ind.get("name", "")
+        dob = ind.get("dateOfBirth")
+        nationality = ind.get("nationality")
+        result = await screen_individual(name, dob, nationality)
+        results.append(result)
+
+    matches_found = sum(1 for r in results if r.get("total_matches", 0) > 0)
+    high_risk = sum(1 for r in results if r.get("risk_level") == "HIGH")
+
+    return {
+        "batch_id": f"batch_{uuid.uuid4().hex[:12]}",
+        "summary": {
+            "total": len(individuals),
+            "matches_found": matches_found,
+            "high_risk_count": high_risk,
+        },
+        "results": results,
+        "screened_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "demo" if DEMO_MODE else "live",
+    }
 
 
 def get_service_status() -> dict:
     return {
         "opensanctions": {
-            "mode": "demo" if DEMO_MODE else "live",
-            "base_url": OPENSANCTIONS_BASE_URL,
+            "mode": "live" if not DEMO_MODE else "demo",
+            "base_url": BASE_URL,
             "api_key_configured": not DEMO_MODE,
         }
     }

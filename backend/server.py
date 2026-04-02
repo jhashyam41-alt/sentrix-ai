@@ -28,15 +28,7 @@ from auth import (
     create_temp_token, get_current_user, totp_service, validate_password
 )
 from services.storage_service import init_storage, put_object, get_object, generate_upload_path
-
-# Helper function to auto-assign CDD tier based on risk score
-def auto_assign_cdd_tier(risk_score: int) -> str:
-    if risk_score <= 30:
-        return "sdd"
-    elif risk_score <= 65:
-        return "standard_cdd"
-    else:
-        return "edd"
+from services.risk_service import auto_assign_cdd_tier
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -387,102 +379,8 @@ async def confirm_2fa_setup(req: dict, request: Request):
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(request: Request):
     user = await get_current_user(request, db)
-    tenant_id = user["tenant_id"]
-    
-    total_customers = await db.customers.count_documents({"tenant_id": tenant_id})
-    pending_reviews = await db.customers.count_documents({
-        "tenant_id": tenant_id,
-        "status": {"$in": ["submitted", "under_review"]}
-    })
-    high_risk = await db.customers.count_documents({
-        "tenant_id": tenant_id,
-        "risk_level": {"$in": ["high", "unacceptable"]}
-    })
-    open_cases = await db.cases.count_documents({
-        "tenant_id": tenant_id,
-        "status": {"$in": ["open", "in_progress", "escalated", "pending_info"]}
-    })
-    
-    # Get recent customers
-    recent_customers = await db.customers.find(
-        {"tenant_id": tenant_id},
-        {"_id": 0}
-    ).sort("created_at", -1).limit(5).to_list(5)
-    
-    # Get open cases
-    open_cases_list = await db.cases.find(
-        {"tenant_id": tenant_id, "status": {"$in": ["open", "in_progress", "escalated"]}},
-        {"_id": 0}
-    ).sort("created_at", -1).limit(5).to_list(5)
-    
-    # KYC Verification Stats
-    total_kyc = await db.kyc_verifications.count_documents({"tenant_id": tenant_id})
-    kyc_verified = await db.kyc_verifications.count_documents({"tenant_id": tenant_id, "verification_status": "verified"})
-    kyc_failed = await db.kyc_verifications.count_documents({"tenant_id": tenant_id, "verification_status": "failed"})
-    
-    # Risk distribution
-    risk_low = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "low"})
-    risk_medium = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "medium"})
-    risk_high = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "high"})
-    risk_unacceptable = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "unacceptable"})
-    
-    # Screening stats
-    pep_matches = await db.customers.count_documents({"tenant_id": tenant_id, "pep_status": "match"})
-    sanctions_matches = await db.customers.count_documents({"tenant_id": tenant_id, "sanctions_status": "potential_match"})
-    adverse_media_hits = await db.customers.count_documents({"tenant_id": tenant_id, "adverse_media_status": "hits_found"})
-    
-    # API usage (for super_admin)
-    api_usage = {}
-    if user["role"] == "super_admin":
-        keys = await db.api_keys.find({"tenant_id": tenant_id}, {"_id": 0, "id": 1}).to_list(50)
-        key_ids = [k["id"] for k in keys]
-        total_api_calls = await db.api_call_logs.count_documents({"client_id": {"$in": key_ids}}) if key_ids else 0
-        active_keys = await db.api_keys.count_documents({"tenant_id": tenant_id, "is_active": True})
-        api_usage = {
-            "total_api_calls": total_api_calls,
-            "active_api_keys": active_keys,
-        }
-    
-    # CDD tier breakdown
-    cdd_sdd = await db.customers.count_documents({"tenant_id": tenant_id, "cdd_tier": "sdd"})
-    cdd_standard = await db.customers.count_documents({"tenant_id": tenant_id, "cdd_tier": "standard_cdd"})
-    cdd_edd = await db.customers.count_documents({"tenant_id": tenant_id, "cdd_tier": "edd"})
-    
-    # Integration status
-    from services.signzy_service import get_service_status as signzy_status
-    from services.opensanctions_service import get_service_status as os_status
-    
-    return {
-        "total_customers": total_customers,
-        "pending_reviews": pending_reviews,
-        "high_risk_customers": high_risk,
-        "open_cases": open_cases,
-        "recent_customers": recent_customers,
-        "open_cases_list": open_cases_list,
-        "kyc_stats": {
-            "total": total_kyc,
-            "verified": kyc_verified,
-            "failed": kyc_failed,
-        },
-        "risk_distribution": {
-            "low": risk_low,
-            "medium": risk_medium,
-            "high": risk_high,
-            "unacceptable": risk_unacceptable,
-        },
-        "screening_stats": {
-            "pep_matches": pep_matches,
-            "sanctions_matches": sanctions_matches,
-            "adverse_media_hits": adverse_media_hits,
-        },
-        "cdd_breakdown": {
-            "sdd": cdd_sdd,
-            "standard_cdd": cdd_standard,
-            "edd": cdd_edd,
-        },
-        "api_usage": api_usage,
-        "integrations": {**signzy_status(), **os_status()},
-    }
+    from services.dashboard_service import gather_dashboard_stats
+    return await gather_dashboard_stats(db, user["tenant_id"], user["role"])
 
 # ===================================
 # CUSTOMER ROUTES
@@ -1584,6 +1482,10 @@ from routes.api_key_routes import router as api_key_router
 app.include_router(kyc_router)
 app.include_router(v1_router)
 app.include_router(api_key_router)
+
+# Initialise shared deps module so routes never import from server.py
+import shared.deps as deps
+deps.init(db, log_audit)
 
 # CORS
 app.add_middleware(

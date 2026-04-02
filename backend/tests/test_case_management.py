@@ -166,7 +166,7 @@ class TestSARFiling:
         # Verify SAR was filed
         case_response = authenticated_client.get(f"{BASE_URL}/api/cases/{existing_case_id}")
         case_data = case_response.json()
-        assert case_data["sar_filed"] is True, "SAR should be marked as filed"
+        assert case_data["sar_filed"] == True, "SAR should be marked as filed"
         assert case_data["sar_reference"] == sar_reference, "SAR reference mismatch"
         print(f"✓ SAR filed successfully: {sar_reference}")
 

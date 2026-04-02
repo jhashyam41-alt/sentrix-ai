@@ -5,14 +5,13 @@ Requires API key authentication via X-API-Key header.
 from fastapi import APIRouter, HTTPException, Request
 from datetime import datetime, timezone
 import uuid
-import asyncio
 
 router = APIRouter(prefix="/api/v1", tags=["Public API v1"])
 
 
 async def _get_db():
-    from server import db
-    return db
+    from shared.deps import get_db
+    return get_db()
 
 
 async def _validate_api_key(request: Request):
@@ -128,78 +127,8 @@ async def calculate_risk_score(data: dict, request: Request):
     if not customer_id:
         raise HTTPException(400, "customerId is required")
 
-    # Look up all KYC verifications
-    kyc_records = await db.kyc_verifications.find(
-        {"customer_id": customer_id}, {"_id": 0}
-    ).to_list(20)
-
-    # Look up screening results
-    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
-
-    # Calculate score
-    breakdown = {"kyc": 0, "sanctions": 0, "pep": 0, "adverse_media": 0, "country_risk": 0}
-
-    # KYC: any failed = +30
-    if kyc_records:
-        any_failed = any(r["verification_status"] == "failed" for r in kyc_records)
-        breakdown["kyc"] = 30 if any_failed else 0
-    else:
-        breakdown["kyc"] = 15  # No KYC done
-
-    # Sanctions
-    sanctions_status = customer.get("sanctions_status", "no_match") if customer else "unknown"
-    if sanctions_status == "potential_match":
-        breakdown["sanctions"] = 40
-    elif sanctions_status == "unknown":
-        breakdown["sanctions"] = 10
-
-    # PEP
-    pep_status = customer.get("pep_status", "no_match") if customer else "unknown"
-    if pep_status == "match":
-        breakdown["pep"] = 20
-
-    # Adverse media
-    am_status = customer.get("adverse_media_status", "no_hits") if customer else "unknown"
-    if am_status == "hits_found":
-        breakdown["adverse_media"] = 15
-
-    # Country risk
-    from services.opensanctions_service import get_country_risk
-    nationality = customer.get("customer_data", {}).get("nationality", "") if customer else ""
-    if get_country_risk(nationality):
-        breakdown["country_risk"] = 10
-
-    total = min(sum(breakdown.values()), 100)
-    if total <= 25:
-        level = "LOW"
-    elif total <= 50:
-        level = "MEDIUM"
-    elif total <= 75:
-        level = "HIGH"
-    else:
-        level = "CRITICAL"
-
-    recommendations = []
-    if breakdown["kyc"] > 0:
-        recommendations.append("Complete KYC verification for all documents")
-    if breakdown["sanctions"] > 0:
-        recommendations.append("Review sanctions match — may require SAR filing")
-    if breakdown["pep"] > 0:
-        recommendations.append("Enhanced due diligence recommended for PEP match")
-    if breakdown["adverse_media"] > 0:
-        recommendations.append("Review adverse media hits for relevance")
-    if breakdown["country_risk"] > 0:
-        recommendations.append("High-risk jurisdiction — apply enhanced monitoring")
-
-    result = {
-        "risk_score_id": str(uuid.uuid4()),
-        "customer_id": customer_id,
-        "risk_score": total,
-        "risk_level": level,
-        "breakdown": breakdown,
-        "recommendations": recommendations,
-        "calculated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    from services.risk_service import calculate_v1_risk_score
+    result = await calculate_v1_risk_score(db, customer_id)
 
     await db.risk_scores.insert_one({**result, "client_id": key_doc["id"]})
 

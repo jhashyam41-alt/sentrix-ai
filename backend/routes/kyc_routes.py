@@ -10,10 +10,10 @@ router = APIRouter(prefix="/api/kyc", tags=["KYC"])
 
 
 async def _get_deps(request: Request):
-    """Get db + user from app state."""
-    from server import get_current_user, db, log_audit
-    user = await get_current_user(request, db)
-    return db, user, log_audit
+    """Get db + user from shared deps (no circular import)."""
+    from shared.deps import get_current_user, get_db, log_audit
+    user = await get_current_user(request)
+    return get_db(), user, log_audit
 
 
 @router.post("/verify-pan")

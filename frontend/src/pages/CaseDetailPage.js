@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import logger from "../utils/logger";
 import { ArrowLeft } from "lucide-react";
 import { CaseNotes } from "../components/cases/CaseNotes";
 import { CaseActions } from "../components/cases/CaseActions";
@@ -56,7 +57,7 @@ export default function CaseDetailPage() {
       setCaseData(caseRes.data);
       setNotes(notesRes.data.notes || []);
     } catch (error) {
-      console.error("Failed to fetch case:", error);
+      logger.error("Failed to fetch case:", error);
     } finally {
       setLoading(false);
     }
@@ -74,7 +75,7 @@ export default function CaseDetailPage() {
       setNewNote("");
       await fetchCase();
     } catch (error) {
-      console.error("Failed to add note:", error);
+      logger.error("Failed to add note:", error);
     } finally {
       setAddingNote(false);
     }
@@ -86,7 +87,7 @@ export default function CaseDetailPage() {
       await axios.put(`${API}/cases/${id}`, { status }, { withCredentials: true });
       await fetchCase();
     } catch (error) {
-      console.error("Failed to update status:", error);
+      logger.error("Failed to update status:", error);
     } finally {
       setUpdating(false);
     }
@@ -98,7 +99,7 @@ export default function CaseDetailPage() {
       await axios.put(`${API}/cases/${id}`, { priority }, { withCredentials: true });
       await fetchCase();
     } catch (error) {
-      console.error("Failed to update priority:", error);
+      logger.error("Failed to update priority:", error);
     } finally {
       setUpdating(false);
     }
@@ -113,7 +114,7 @@ export default function CaseDetailPage() {
       setEscalateReason("");
       await fetchCase();
     } catch (error) {
-      console.error("Failed to escalate:", error);
+      logger.error("Failed to escalate:", error);
     } finally {
       setUpdating(false);
     }
@@ -128,7 +129,7 @@ export default function CaseDetailPage() {
       setSarReference("");
       await fetchCase();
     } catch (error) {
-      console.error("Failed to file SAR:", error);
+      logger.error("Failed to file SAR:", error);
     } finally {
       setUpdating(false);
     }
@@ -144,7 +145,7 @@ export default function CaseDetailPage() {
       setDispositionNote("");
       await fetchCase();
     } catch (error) {
-      console.error("Failed to close case:", error);
+      logger.error("Failed to close case:", error);
     } finally {
       setUpdating(false);
     }

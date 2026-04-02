@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import logger from "../utils/logger";
 import { Plus, Search, Filter } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -24,7 +25,7 @@ export default function CustomersPage() {
       });
       setCustomers(data.customers || []);
     } catch (error) {
-      console.error("Failed to fetch customers:", error);
+      logger.error("Failed to fetch customers:", error);
     } finally {
       setLoading(false);
     }

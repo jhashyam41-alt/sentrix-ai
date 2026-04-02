@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import logger from "../utils/logger";
 import { ArrowLeft, User, Shield, AlertTriangle, Calendar } from "lucide-react";
 import { PEPScreeningCard } from "../components/customers/PEPScreeningCard";
 import { AdverseMediaCard } from "../components/customers/AdverseMediaCard";
@@ -49,7 +50,7 @@ export default function CustomerDetailPage() {
         setEddChecklist(data.edd_checklist);
       }
     } catch (error) {
-      console.error("Failed to fetch customer:", error);
+      logger.error("Failed to fetch customer:", error);
     } finally {
       setLoading(false);
     }
@@ -70,7 +71,7 @@ export default function CustomerDetailPage() {
       setPepScreening(data.pep_screening);
       await fetchCustomer(); // Refresh customer data
     } catch (error) {
-      console.error("PEP screening failed:", error);
+      logger.error("PEP screening failed:", error);
     } finally {
       setScreeningPEP(false);
     }
@@ -87,7 +88,7 @@ export default function CustomerDetailPage() {
       setAdverseMedia(data.adverse_media_screening);
       await fetchCustomer(); // Refresh customer data
     } catch (error) {
-      console.error("Adverse media screening failed:", error);
+      logger.error("Adverse media screening failed:", error);
     } finally {
       setScreeningAdverseMedia(false);
     }
@@ -102,7 +103,7 @@ export default function CustomerDetailPage() {
       );
       await fetchCustomer(); // Refresh customer data
     } catch (error) {
-      console.error("Failed to mark hit:", error);
+      logger.error("Failed to mark hit:", error);
     }
   };
 
@@ -116,7 +117,7 @@ export default function CustomerDetailPage() {
       );
       await fetchCustomer(); // Refresh customer data
     } catch (error) {
-      console.error("Failed to update CDD status:", error);
+      logger.error("Failed to update CDD status:", error);
     } finally {
       setUpdatingCDD(false);
     }
@@ -133,7 +134,7 @@ export default function CustomerDetailPage() {
       setEddChecklist(data.edd_checklist);
       await fetchCustomer(); // Refresh customer data
     } catch (error) {
-      console.error("Failed to update EDD checklist:", error);
+      logger.error("Failed to update EDD checklist:", error);
     }
   };
 

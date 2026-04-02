@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import logger from "../utils/logger";
 import { Plus, Search, AlertCircle, Clock, CheckCircle } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -36,7 +37,7 @@ export default function CasesListPage() {
       });
       setCases(data.cases || []);
     } catch (error) {
-      console.error("Failed to fetch cases:", error);
+      logger.error("Failed to fetch cases:", error);
     } finally {
       setLoading(false);
     }

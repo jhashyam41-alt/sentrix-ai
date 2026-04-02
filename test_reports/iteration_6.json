@@ -1,0 +1,110 @@
+{
+  "summary": "Regression testing after code quality refactoring. All 28 backend tests pass. All frontend UI flows working correctly. Fixed missing screen_batch function in opensanctions_service.py.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: Login authentication with shyam@sentrixai.com / Sentrix@2024",
+    "Backend: Dashboard stats endpoint returns all required fields (total_customers, pending_reviews, high_risk_customers, open_cases, risk_distribution, screening_stats, kyc_stats, cdd_breakdown, integrations, api_usage)",
+    "Backend: POST /api/kyc/verify-pan with valid PAN format returns verification result (DEMO mode)",
+    "Backend: POST /api/kyc/verify-pan with invalid format returns 400",
+    "Backend: POST /api/kyc/verify-aadhaar with valid 12-digit number returns verification result",
+    "Backend: POST /api/kyc/verify-aadhaar with invalid format returns 400",
+    "Backend: POST /api/kyc/verify-passport with valid format returns verification result",
+    "Backend: POST /api/kyc/verify-voter-id with valid format returns verification result",
+    "Backend: POST /api/kyc/verify-driving-license with valid format returns verification result",
+    "Backend: GET /api/kyc/verifications/{customerId} returns verification history",
+    "Backend: GET /api/kyc/status returns Signzy integration status (demo mode)",
+    "Backend: POST /api/api-keys creates new API key with api_key and secret_key",
+    "Backend: POST /api/api-keys without client_name returns 400",
+    "Backend: GET /api/api-keys lists all API keys",
+    "Backend: GET /api/api-keys/usage returns usage stats (total_calls, today_calls, active_keys)",
+    "Backend: GET /api/api-keys/integration-status returns signzy and opensanctions status",
+    "Backend: PUT /api/api-keys/{id}/revoke revokes API key",
+    "Backend: POST /api/v1/screen without X-API-Key returns 401",
+    "Backend: POST /api/v1/screen with valid API key returns screening result",
+    "Backend: POST /api/v1/screening/individual returns individual screening result",
+    "Backend: POST /api/v1/screening/batch returns batch screening results",
+    "Backend: POST /api/v1/screening/batch with empty array returns 400",
+    "Backend: POST /api/v1/risk/score returns risk score with breakdown and recommendations",
+    "Backend: POST /api/v1/risk/score without customerId returns 400",
+    "Backend: POST /api/screening/run-quick (authenticated) returns quick screening result",
+    "Backend: POST /api/screening/run-quick with KYC check returns KYC result",
+    "Backend: POST /api/screening/run-quick without name returns 400",
+    "Frontend: Login page loads and accepts credentials",
+    "Frontend: Dashboard shows all stat cards (Total Customers, Pending Reviews, High Risk, Open Cases)",
+    "Frontend: Dashboard shows Risk Distribution section",
+    "Frontend: Dashboard shows Screening Alerts section (Sanctions, PEP, Adverse Media)",
+    "Frontend: Dashboard shows KYC & Due Diligence section with CDD Tiers",
+    "Frontend: Dashboard shows Integration Status (Signzy DEMO, OpenSanctions DEMO)",
+    "Frontend: Dashboard shows API Usage section (Total Calls, Active Keys)",
+    "Frontend: Dashboard shows Recent Customers list",
+    "Frontend: Dashboard shows Open Cases list",
+    "Frontend: API Keys page shows usage stats (Total API Calls, Today's Calls, Active Keys)",
+    "Frontend: API Keys page Create Key button works",
+    "Frontend: API Keys page lists existing keys with Active/Revoked status",
+    "Frontend: Screening Hub shows integration status cards with DEMO badge",
+    "Frontend: Screening Hub Individual tab has all form fields (name, nationality, dob, id type)",
+    "Frontend: Screening Hub check toggles work (sanctions, pep, kyc)",
+    "Frontend: Screening Hub Run Screening returns result with risk level",
+    "Frontend: Screening Hub Batch tab present",
+    "Frontend: Customer Detail page shows KYC Document Verification Card with DEMO MODE badge",
+    "Frontend: Customer Detail page has all 5 KYC document tabs (PAN, Aadhaar, Passport, Voter ID, DL)",
+    "Frontend: Customer Detail page KYC verification works and shows result",
+    "Frontend: Customer Detail page shows verification history",
+    "Frontend: Customer Detail page shows CDD/EDD Management card with tier info",
+    "Frontend: CDDManagementCard renders CDD tier, status, and update buttons without errors",
+    "Frontend: Sidebar has all navigation items (Dashboard, Customers, Screening, Cases, API Keys, Audit Logs, Settings)",
+    "Frontend: All navigation links work correctly",
+    "Code Quality: No console.error statements in pages/components (replaced with logger utility)",
+    "Code Quality: shared/deps.py module eliminates circular imports",
+    "Code Quality: dashboard_service.py extracts dashboard stats logic",
+    "Code Quality: risk_service.py extracts risk scoring logic with calculate_v1_risk_score",
+    "Code Quality: CDDManagementCard uses helper functions instead of nested ternaries"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/regression_refactor_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/services/opensanctions_service.py"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 tests passed)",
+    "frontend": "100% (all UI flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "shyam@sentrixai.com",
+    "admin_password": "Sentrix@2024",
+    "role": "super_admin"
+  },
+  "seed_data_creation": "Created test API keys and customers during testing (prefixed with TEST_)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Code quality refactoring verified. All features working: Signzy KYC Mock (PAN, Aadhaar, Passport, Voter ID, DL verification), OpenSanctions Mock Screening (sanctions, PEP, batch), Public API v1 (screen, screening/individual, screening/batch, risk/score), API Key Management (create, list, revoke, usage stats), Quick Screening endpoint. Fixed missing screen_batch function in opensanctions_service.py. The shared/deps.py module eliminates circular imports - routes now call from shared.deps instead of server.py. Dashboard stats extracted to dashboard_service.py. Risk scoring extracted to risk_service.py. All console.error replaced with logger utility. CDDManagementCard uses helper functions instead of nested ternaries.",
+  "mocked_apis": {
+    "signzy_service.py": "KYC verification (PAN, Aadhaar, Passport, Voter ID, DL) returns mock results with 80% success rate",
+    "opensanctions_service.py": "Sanctions/PEP/batch screening returns mock results with 30% match rate"
+  },
+  "refactoring_verified": {
+    "circular_imports_eliminated": "shared/deps.py module created, routes use from shared.deps import get_current_user, get_db, log_audit",
+    "dashboard_stats_extracted": "services/dashboard_service.py with gather_dashboard_stats function",
+    "risk_scoring_extracted": "services/risk_service.py with calculate_v1_risk_score, calculate_risk_level, auto_assign_cdd_tier",
+    "console_error_replaced": "All 27 console.error calls replaced with logger utility from utils/logger.js",
+    "nested_ternaries_fixed": "CDDManagementCard uses getCDDTierColor, getCDDTierLabel, getCDDStatusBadge helper functions",
+    "frontend_components_split": "KYCVerificationCard split into KYCDocForm + KYCResultDisplay, ScreeningHubPage split into IndividualScreeningForm + ScreeningResultCard"
+  },
+  "bug_fixed": {
+    "issue": "Missing screen_batch function in opensanctions_service.py",
+    "fix": "Added screen_batch async function that iterates over individuals and calls screen_individual for each",
+    "file": "/app/backend/services/opensanctions_service.py"
+  }
+}

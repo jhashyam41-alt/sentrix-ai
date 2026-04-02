@@ -6,8 +6,9 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 ## Architecture
 - **Frontend**: React, Tailwind CSS, Shadcn UI, DM Sans font, custom dark theme (#080c12 bg)
 - **Backend**: FastAPI, PyOTP (2FA), PyJWT, Motor (MongoDB async)
-- **Database**: MongoDB (collections: users, customers, cases, case_notes, case_comments, audit_logs, tenants, files, kyc_verifications, api_keys, api_call_logs, v1_screenings, risk_scores, pep_screenings, adverse_media_screenings)
+- **Database**: MongoDB
 - **Auth**: JWT + 2FA (TOTP), role-based (super_admin, compliance_officer, analyst, read_only_auditor)
+- **Shared deps**: `/app/backend/shared/deps.py` — centralised db, auth, audit. Routes import from here (no circular imports)
 
 ## Completed Features
 
@@ -23,44 +24,37 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 - File uploads (10MB max, PDF/JPG/PNG)
 
 ### Phase 2 — KYC/AML Integration (DONE - Mock Mode)
-- **Signzy KYC Service**: PAN, Aadhaar, Passport, Voter ID, Driving License verification (mock with 80% success rate)
-- **OpenSanctions Service**: Individual screening, batch screening (mock with 30% match rate), FATF high-risk country detection
-- **KYC Routes**: /api/kyc/verify-pan, verify-aadhaar, verify-passport, verify-voter-id, verify-driving-license, verifications/{customerId}, status
-- **Public API v1**: /api/v1/screen (unified), /api/v1/screening/individual, /api/v1/screening/batch, /api/v1/risk/score (API key auth + rate limiting)
-- **API Key Management**: Create, list, revoke API keys, usage stats, integration status
-- **Quick Screening**: /api/screening/run-quick (authenticated, no customer required)
-- **Enhanced Dashboard**: Risk distribution, screening alerts, KYC & due diligence stats, CDD breakdown, integration status, API usage metrics
-- **Screening Hub**: Individual + batch screening with integration status
-- **Customer KYC Card**: 5 document types, verify UI, history
+- Signzy KYC: PAN, Aadhaar, Passport, Voter ID, DL verification (mock)
+- OpenSanctions: Individual, batch screening, FATF country detection (mock)
+- KYC Routes, Public API v1, API Key Management
+- Enhanced Dashboard: Risk distribution, screening alerts, KYC stats, CDD breakdown, integration status, API usage
+- Screening Hub: Individual + batch
+- Customer KYC Card: 5 document types with verify + history
+
+### Phase 3 — Code Quality Refactoring (DONE)
+- Eliminated circular imports (shared/deps.py)
+- Extracted dashboard stats → dashboard_service.py
+- Extracted risk scoring → risk_service.py (incl. calculate_v1_risk_score)
+- Split KYCVerificationCard → KYCDocForm + KYCResultDisplay
+- Split ScreeningHubPage → IndividualScreeningForm + ScreeningResultCard
+- Replaced 27 console.error calls → env-aware logger utility
+- Fixed nested ternaries in CDDManagementCard
+- Removed hardcoded test secrets
+- Fixed `is True` comparison anti-pattern
 
 ## Pending Features
 
 ### P1 — Reporting Module
 - /reports page with PDF/CSV exports for compliance reports
-- Configurable report templates
 
 ### P1 — Admin Settings & Stripe Billing
 - /settings/billing with Stripe subscription management
-- Tenant settings configuration
 
 ### P2 — Notifications
-- In-app notification bell
-- SendGrid email alerts
-- Webhooks (retry logic, HMAC-SHA256)
+- In-app notification bell, SendGrid email alerts, Webhooks
 
 ### P2 — Public Portal
 - Self-service customer onboarding portal (/onboarding/:token)
-
-## Key API Endpoints
-- Auth: POST /api/auth/login, /register, /logout, /2fa/setup/initiate, /2fa/setup/confirm, /2fa/verify
-- Customers: GET/POST /api/customers, GET/PUT /api/customers/{id}
-- Cases: GET/POST /api/cases, GET/PUT /api/cases/{id}, POST /{id}/notes, /escalate, /sar, /close
-- Audit: GET /api/audit-logs, /filters, /export/csv, /export/pdf
-- CDD: POST /api/cdd/{id}/update-status, /edd-checklist, GET /api/cdd/expiring-reviews
-- Screening: POST /api/screening/run/{id}, /pep/{id}, /adverse-media/{id}, /run-quick
-- KYC: POST /api/kyc/verify-{type}, GET /api/kyc/verifications/{id}, /status
-- API Keys: GET/POST /api/api-keys, PUT /{id}/revoke, GET /usage, /integration-status
-- Public API: POST /api/v1/screen, /screening/individual, /screening/batch, /risk/score
 
 ## Test Credentials
 - Primary: shyam@sentrixai.com / Sentrix@2024 (super_admin)

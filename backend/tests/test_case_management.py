@@ -9,10 +9,10 @@ import time
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://risk-screening.preview.emergentagent.com').rstrip('/')
 
-# Test credentials
-TEST_EMAIL = "shyam@sentrixai.com"
-TEST_PASSWORD = "Sentrix@2024"
-EXISTING_CUSTOMER_ID = "6fd83cbd-a847-420e-a260-71231057e237"
+# Test credentials from environment
+TEST_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', '')
+TEST_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', '')
+EXISTING_CUSTOMER_ID = os.environ.get('TEST_CUSTOMER_ID', '')
 
 
 class TestAuthentication:
@@ -143,7 +143,7 @@ class TestCaseEscalation:
         case_response = authenticated_client.get(f"{BASE_URL}/api/cases/{existing_case_id}")
         case_data = case_response.json()
         assert case_data["status"] == "escalated", f"Case status should be 'escalated', got {case_data['status']}"
-        print(f"✓ Case escalated successfully")
+        print("✓ Case escalated successfully")
 
 
 class TestSARFiling:
@@ -166,8 +166,8 @@ class TestSARFiling:
         # Verify SAR was filed
         case_response = authenticated_client.get(f"{BASE_URL}/api/cases/{existing_case_id}")
         case_data = case_response.json()
-        assert case_data["sar_filed"] == True, "SAR should be marked as filed"
-        assert case_data["sar_reference"] == sar_reference, f"SAR reference mismatch"
+        assert case_data["sar_filed"] is True, "SAR should be marked as filed"
+        assert case_data["sar_reference"] == sar_reference, "SAR reference mismatch"
         print(f"✓ SAR filed successfully: {sar_reference}")
 
 
@@ -349,7 +349,7 @@ def auth_token(api_client):
 def authenticated_client(api_client, auth_token):
     """Session with auth cookie"""
     # Login to get cookies
-    response = api_client.post(f"{BASE_URL}/api/auth/login", json={
+    api_client.post(f"{BASE_URL}/api/auth/login", json={
         "email": TEST_EMAIL,
         "password": TEST_PASSWORD
     })

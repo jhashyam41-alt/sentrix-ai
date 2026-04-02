@@ -752,7 +752,8 @@ async def export_audit_csv(
     user_name: Optional[str] = None,
     module: Optional[str] = None
 ):
-    import csv, io
+    import csv
+    import io
     user = await get_current_user(request, db)
     if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
         raise HTTPException(403, "Access denied")
@@ -792,12 +793,7 @@ async def export_audit_pdf(
     user_name: Optional[str] = None,
     module: Optional[str] = None
 ):
-    import io
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
+    from services.pdf_service import generate_audit_pdf
 
     user = await get_current_user(request, db)
     if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
@@ -806,60 +802,12 @@ async def export_audit_pdf(
     query = _build_audit_query(user["tenant_id"], action_type, user_name, module, start_date, end_date)
     logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).to_list(5000)
 
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=0.4*inch, rightMargin=0.4*inch,
-                            topMargin=0.5*inch, bottomMargin=0.5*inch)
-    styles = getSampleStyleSheet()
-    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=7, leading=9)
-    header_style = ParagraphStyle("Header", parent=styles["Normal"], fontSize=7, leading=9, textColor=colors.white)
-    title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=16, spaceAfter=6)
-
-    elements = []
-    elements.append(Paragraph("AMLGuard — Audit Log Report", title_style))
-    elements.append(Paragraph(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}  |  Records: {len(logs)}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
-
-    data = [[
-        Paragraph("Timestamp", header_style),
-        Paragraph("User", header_style),
-        Paragraph("Role", header_style),
-        Paragraph("Action", header_style),
-        Paragraph("Module", header_style),
-        Paragraph("Record ID", header_style),
-        Paragraph("IP", header_style),
-    ]]
-    for log in logs:
-        ts = log.get("timestamp", "")[:19].replace("T", " ")
-        data.append([
-            Paragraph(ts, cell_style),
-            Paragraph(log.get("user_name", ""), cell_style),
-            Paragraph(log.get("user_role", ""), cell_style),
-            Paragraph(log.get("action_type", ""), cell_style),
-            Paragraph(log.get("module", ""), cell_style),
-            Paragraph(str(log.get("record_id", ""))[:20], cell_style),
-            Paragraph(log.get("ip_address", ""), cell_style),
-        ])
-
-    col_widths = [1.6*inch, 1.3*inch, 1.0*inch, 1.6*inch, 0.9*inch, 1.5*inch, 1.2*inch]
-    table = Table(data, colWidths=col_widths, repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0d1117")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#1e2530")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(table)
-
-    doc.build(elements)
+    pdf_bytes = generate_audit_pdf(logs)
 
     await log_audit(user["tenant_id"], user, "audit_log_exported", "audit", None, {"format": "pdf"}, request)
 
     return Response(
-        content=buf.getvalue(),
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=audit_log_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"}
     )
@@ -868,20 +816,24 @@ async def export_audit_pdf(
 # CASE MANAGEMENT ROUTES
 # ===================================
 
-async def auto_create_case(tenant_id: str, customer_id: str, customer_name: str, 
-                           case_type: str, priority: str, created_by: str, details: dict, db):
-    """Helper function to auto-create cases"""
+async def auto_create_case(params: dict, db):
+    """Helper function to auto-create cases.
+    
+    params keys: tenant_id, customer_id, customer_name, case_type, priority, created_by, details
+    """
+    tenant_id = params["tenant_id"]
     case_number = await db.cases.count_documents({"tenant_id": tenant_id}) + 1
     case_id = f"CASE-{case_number:05d}"
     
+    now = datetime.now(timezone.utc).isoformat()
     case_doc = {
         "id": str(uuid.uuid4()),
         "case_id": case_id,
         "tenant_id": tenant_id,
-        "customer_id": customer_id,
-        "customer_name": customer_name,
-        "case_type": case_type,
-        "priority": priority,
+        "customer_id": params["customer_id"],
+        "customer_name": params["customer_name"],
+        "case_type": params["case_type"],
+        "priority": params["priority"],
         "status": "open",
         "assigned_to": None,
         "due_date": None,
@@ -890,10 +842,10 @@ async def auto_create_case(tenant_id: str, customer_id: str, customer_name: str,
         "sar_filed_date": None,
         "disposition": None,
         "disposition_note": None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "created_by": created_by,
-        "details": details
+        "created_at": now,
+        "updated_at": now,
+        "created_by": params["created_by"],
+        "details": params.get("details", {})
     }
     
     await db.cases.insert_one(case_doc)
@@ -1306,30 +1258,12 @@ async def mark_adverse_media_hit(customer_id: str, data: dict, request: Request)
     
     adverse_media["hits"] = hits
     
-    # Calculate relevant hits count
-    relevant_count = sum(1 for h in hits if h.get("relevance") == "relevant")
-    
     # Update risk score if marked as relevant
     current_risk_score = customer.get("risk_score", 0)
+    new_risk_score = min(current_risk_score + 15, 100) if relevance == "relevant" else current_risk_score
     
-    if relevance == "relevant":
-        # Add 15 points per relevant hit, max 45 points total from adverse media
-        adverse_media_points = min(relevant_count * 15, 45)
-        # Recalculate total score
-        new_risk_score = min(current_risk_score + 15, 100)
-    else:
-        # Recalculate based on all relevant hits
-        new_risk_score = current_risk_score
-    
-    # Determine risk level
-    if new_risk_score <= 30:
-        risk_level = "low"
-    elif new_risk_score <= 65:
-        risk_level = "medium"
-    else:
-        risk_level = "high"
-    
-    # Auto-assign CDD tier
+    from services.risk_service import calculate_risk_level
+    risk_level = calculate_risk_level(new_risk_score)
     cdd_tier = auto_assign_cdd_tier(new_risk_score)
     
     update_data = {
@@ -1340,7 +1274,6 @@ async def mark_adverse_media_hit(customer_id: str, data: dict, request: Request)
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     
-    # If high risk and EDD required
     if cdd_tier == "edd" and customer.get("cdd_status") not in ["edd_in_progress", "edd_complete"]:
         update_data["cdd_status"] = "requires_edd"
     
@@ -1393,55 +1326,36 @@ async def screen_pep(customer_id: str, request: Request):
     # If PEP detected, increase risk score and potentially trigger EDD
     if pep_result.get("is_pep"):
         pep_tier = pep_result.get("pep_tier")
-        pep_points = 0
-        if pep_tier == "tier1":
-            pep_points = 30
-        elif pep_tier == "tier2":
-            pep_points = 20
-        elif pep_tier == "tier3":
-            pep_points = 10
-        elif pep_tier == "rca":
-            pep_points = 5
+        from services.risk_service import calculate_pep_points, calculate_risk_level
+        pep_points = calculate_pep_points(pep_tier)
         
         new_risk_score = min(customer.get("risk_score", 0) + pep_points, 100)
         update_data["risk_score"] = new_risk_score
-        
-        # Auto-assign CDD tier based on risk score
         update_data["cdd_tier"] = auto_assign_cdd_tier(new_risk_score)
+        update_data["risk_level"] = calculate_risk_level(new_risk_score)
         
-        # Determine risk level
-        if new_risk_score <= 30:
-            update_data["risk_level"] = "low"
-        elif new_risk_score <= 65:
-            update_data["risk_level"] = "medium"
-        else:
-            update_data["risk_level"] = "high"
-            # High risk requires EDD
+        if update_data["risk_level"] == "high":
             if update_data["cdd_tier"] == "edd" and customer.get("cdd_status") not in ["edd_in_progress", "edd_complete"]:
                 update_data["cdd_status"] = "requires_edd"
         
-        # Send email alert to admin
         from services.email_service import email_service
-        admin_email = user.get("email")
         await email_service.send_email(
-            admin_email,
+            user.get("email"),
             f"PEP Match Detected - {customer_data.get('full_name', 'Customer')}",
             f"PEP match detected for {customer_data.get('full_name', 'N/A')}. Tier: {pep_tier}. Risk Score: {new_risk_score}/100."
         )
         
-        # Auto-create case for PEP match
         customer_name = customer_data.get("full_name") or customer_data.get("company_legal_name", "Unknown")
         priority = "critical" if pep_tier == "tier1" else "high" if pep_tier == "tier2" else "medium"
-        await auto_create_case(
-            tenant_id=user["tenant_id"],
-            customer_id=customer_id,
-            customer_name=customer_name,
-            case_type="pep_match",
-            priority=priority,
-            created_by=user["id"],
-            details={"pep_tier": pep_tier, "risk_score": new_risk_score, "trigger": "pep_screening"},
-            db=db
-        )
+        await auto_create_case({
+            "tenant_id": user["tenant_id"],
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "case_type": "pep_match",
+            "priority": priority,
+            "created_by": user["id"],
+            "details": {"pep_tier": pep_tier, "risk_score": new_risk_score, "trigger": "pep_screening"},
+        }, db)
     
     await db.customers.update_one(
         {"id": customer_id, "tenant_id": user["tenant_id"]},
@@ -1498,8 +1412,9 @@ async def run_screening(customer_id: str, request: Request):
     if adverse_result.get("has_hits"):
         risk_score += 15
     
+    from services.risk_service import calculate_risk_level
     update_data["risk_score"] = risk_score
-    update_data["risk_level"] = "low" if risk_score < 30 else "medium" if risk_score < 66 else "high"
+    update_data["risk_level"] = calculate_risk_level(risk_score)
     update_data["cdd_tier"] = auto_assign_cdd_tier(risk_score)
     
     await db.customers.update_one(
@@ -1511,30 +1426,28 @@ async def run_screening(customer_id: str, request: Request):
     customer_name = customer_data.get("full_name") or customer_data.get("company_legal_name", "Unknown")
     
     if sanctions_result["status"] == "potential_match":
-        await auto_create_case(
-            tenant_id=user["tenant_id"],
-            customer_id=customer_id,
-            customer_name=customer_name,
-            case_type="sanctions_match",
-            priority="critical",
-            created_by=user["id"],
-            details={"matched_list": sanctions_result.get("matched_list"), "trigger": "bulk_screening"},
-            db=db
-        )
+        await auto_create_case({
+            "tenant_id": user["tenant_id"],
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "case_type": "sanctions_match",
+            "priority": "critical",
+            "created_by": user["id"],
+            "details": {"matched_list": sanctions_result.get("matched_list"), "trigger": "bulk_screening"},
+        }, db)
     
     if pep_result.get("is_pep"):
         pep_tier = pep_result.get("pep_tier", "tier3")
         priority = "critical" if pep_tier == "tier1" else "high" if pep_tier == "tier2" else "medium"
-        await auto_create_case(
-            tenant_id=user["tenant_id"],
-            customer_id=customer_id,
-            customer_name=customer_name,
-            case_type="pep_match",
-            priority=priority,
-            created_by=user["id"],
-            details={"pep_tier": pep_tier, "trigger": "bulk_screening"},
-            db=db
-        )
+        await auto_create_case({
+            "tenant_id": user["tenant_id"],
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "case_type": "pep_match",
+            "priority": priority,
+            "created_by": user["id"],
+            "details": {"pep_tier": pep_tier, "trigger": "bulk_screening"},
+        }, db)
     
     await log_audit(user["tenant_id"], user, "screening_run", "screening", customer_id, request=request)
     

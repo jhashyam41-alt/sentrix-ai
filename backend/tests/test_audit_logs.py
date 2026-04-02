@@ -14,9 +14,9 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-# Test credentials from test_credentials.md
-ADMIN_EMAIL = "shyam@sentrixai.com"
-ADMIN_PASSWORD = "Sentrix@2024"
+# Test credentials from environment
+ADMIN_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', '')
+ADMIN_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', '')
 
 
 class TestAuditLogAuthentication:
@@ -98,8 +98,8 @@ class TestAuditLogEndpoints:
             assert len(data1["logs"]) == 5, "First page should have 5 logs"
             # Second page should have different logs
             if data2["logs"]:
-                first_ids = [l.get("id") for l in data1["logs"]]
-                second_ids = [l.get("id") for l in data2["logs"]]
+                first_ids = [log.get("id") for log in data1["logs"]]
+                second_ids = [log.get("id") for log in data2["logs"]]
                 assert first_ids != second_ids, "Pagination should return different logs"
         
         print(f"✓ Pagination working - Page 1: {len(data1['logs'])} logs, Page 2: {len(data2['logs'])} logs")
@@ -154,7 +154,7 @@ class TestAuditLogEndpoints:
                 
                 # user_name filter uses regex, so partial match is allowed
                 for log in data["logs"]:
-                    assert user_name.lower() in log["user_name"].lower(), f"User name filter failed"
+                    assert user_name.lower() in log["user_name"].lower(), "User name filter failed"
                 
                 print(f"✓ Filter by user_name '{user_name}' returned {len(data['logs'])} logs")
     
@@ -182,7 +182,7 @@ class TestAuditLogEndpoints:
         assert isinstance(data["modules"], list), "modules should be a list"
         assert isinstance(data["users"], list), "users should be a list"
         
-        print(f"✓ GET /api/audit-logs/filters returned:")
+        print("✓ GET /api/audit-logs/filters returned:")
         print(f"  - action_types: {data['action_types']}")
         print(f"  - modules: {data['modules']}")
         print(f"  - users: {data['users']}")

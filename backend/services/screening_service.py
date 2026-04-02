@@ -12,9 +12,6 @@ class ScreeningService:
     """Mock screening service - returns simulated results"""
 
     async def screen_pep(self, customer_data: dict) -> dict:
-        full_name = customer_data.get("full_name", "Unknown")
-        nationality = customer_data.get("nationality", "Unknown")
-
         # Simulate PEP detection (~30% chance)
         is_pep = secrets.randbelow(10) < 3
 

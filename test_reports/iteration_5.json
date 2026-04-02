@@ -1,0 +1,122 @@
+{
+  "summary": "Comprehensive testing of new AMLGuard features: Signzy KYC Mock Integration, OpenSanctions Mock Screening, Public API v1 with API Key auth, and Enhanced Dashboard. All 28 backend tests passed. All frontend UI flows working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: Login authentication with shyam@sentrixai.com / Sentrix@2024",
+    "Backend: Dashboard stats endpoint returns all required fields (total_customers, pending_reviews, high_risk_customers, open_cases, risk_distribution, screening_stats, kyc_stats, cdd_breakdown, integrations, api_usage)",
+    "Backend: POST /api/kyc/verify-pan with valid PAN format returns verification result (DEMO mode)",
+    "Backend: POST /api/kyc/verify-pan with invalid format returns 400",
+    "Backend: POST /api/kyc/verify-aadhaar with valid 12-digit number returns verification result",
+    "Backend: POST /api/kyc/verify-aadhaar with invalid format returns 400",
+    "Backend: POST /api/kyc/verify-passport with valid format returns verification result",
+    "Backend: POST /api/kyc/verify-voter-id with valid format returns verification result",
+    "Backend: POST /api/kyc/verify-driving-license with valid format returns verification result",
+    "Backend: GET /api/kyc/verifications/{customerId} returns verification history",
+    "Backend: GET /api/kyc/status returns Signzy integration status (demo mode)",
+    "Backend: POST /api/api-keys creates new API key with api_key and secret_key",
+    "Backend: POST /api/api-keys without client_name returns 400",
+    "Backend: GET /api/api-keys lists all API keys",
+    "Backend: GET /api/api-keys/usage returns usage stats (total_calls, today_calls, active_keys)",
+    "Backend: GET /api/api-keys/integration-status returns signzy and opensanctions status",
+    "Backend: PUT /api/api-keys/{id}/revoke revokes API key",
+    "Backend: POST /api/v1/screen without X-API-Key returns 401",
+    "Backend: POST /api/v1/screen with valid API key returns screening result",
+    "Backend: POST /api/v1/screening/individual returns individual screening result",
+    "Backend: POST /api/v1/screening/batch returns batch screening results",
+    "Backend: POST /api/v1/screening/batch with empty array returns 400",
+    "Backend: POST /api/v1/risk/score returns risk score with breakdown and recommendations",
+    "Backend: POST /api/v1/risk/score without customerId returns 400",
+    "Backend: POST /api/screening/run-quick (authenticated) returns quick screening result",
+    "Backend: POST /api/screening/run-quick with KYC check returns KYC result",
+    "Backend: POST /api/screening/run-quick without name returns 400",
+    "Frontend: Login page loads and accepts credentials",
+    "Frontend: Dashboard shows all stat cards (Total Customers, Pending Reviews, High Risk, Open Cases)",
+    "Frontend: Dashboard shows Risk Distribution section",
+    "Frontend: Dashboard shows Screening Alerts section (Sanctions, PEP, Adverse Media)",
+    "Frontend: Dashboard shows KYC & Due Diligence section with CDD Tiers",
+    "Frontend: Dashboard shows Integration Status (Signzy DEMO, OpenSanctions DEMO)",
+    "Frontend: Dashboard shows API Usage section (Total Calls, Active Keys)",
+    "Frontend: Dashboard shows Recent Customers list",
+    "Frontend: Dashboard shows Open Cases list",
+    "Frontend: API Keys page shows usage stats",
+    "Frontend: API Keys page Create Key button works",
+    "Frontend: API Keys page displays new key with API Key and Secret Key",
+    "Frontend: API Keys page lists existing keys with Active/Revoked status",
+    "Frontend: API Keys page Revoke button works",
+    "Frontend: Screening Hub shows integration status cards with DEMO badge",
+    "Frontend: Screening Hub Individual tab has all form fields (name, nationality, dob, id type, id number)",
+    "Frontend: Screening Hub check toggles work (sanctions, pep, kyc)",
+    "Frontend: Screening Hub Run Screening returns result with risk level",
+    "Frontend: Screening Hub Batch tab has textarea and Run Batch button",
+    "Frontend: Customer Detail page shows KYC Verification Card with DEMO MODE badge",
+    "Frontend: Customer Detail page has all 5 KYC document tabs (PAN, Aadhaar, Passport, Voter ID, DL)",
+    "Frontend: Customer Detail page KYC verification works and shows result",
+    "Frontend: Customer Detail page shows verification history",
+    "Frontend: Sidebar has all navigation items (Dashboard, Customers, Screening, Cases, API Keys, Audit Logs, Settings)",
+    "Frontend: All navigation links work correctly"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/new_features_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 tests passed)",
+    "frontend": "100% (all UI flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "shyam@sentrixai.com",
+    "admin_password": "Sentrix@2024",
+    "role": "super_admin"
+  },
+  "seed_data_creation": "Created test API keys and customers during testing (prefixed with TEST_)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All new features tested and working: Signzy KYC Mock (PAN, Aadhaar, Passport, Voter ID, DL verification), OpenSanctions Mock Screening (sanctions, PEP), Public API v1 (screen, screening/individual, screening/batch, risk/score), API Key Management (create, list, revoke, usage stats), Quick Screening endpoint. All integrations run in DEMO mode with ~80% success rate for KYC and ~30% match rate for sanctions. Dashboard shows comprehensive metrics including KYC stats, risk distribution, screening alerts, CDD breakdown, integration status, and API usage.",
+  "mocked_apis": {
+    "signzy_service.py": "KYC verification (PAN, Aadhaar, Passport, Voter ID, DL) returns mock results with 80% success rate",
+    "opensanctions_service.py": "Sanctions/PEP screening returns mock results with 30% match rate"
+  },
+  "features_verified": {
+    "dashboard": {
+      "stat_cards": ["Total Customers", "Pending Reviews", "High Risk", "Open Cases"],
+      "sections": ["Risk Distribution", "Screening Alerts", "KYC & Due Diligence", "Integration Status", "API Usage", "Recent Customers", "Open Cases"],
+      "status": "WORKING"
+    },
+    "api_keys_page": {
+      "features": ["Usage stats display", "Create new API key", "Display API key and secret", "List existing keys", "Revoke key"],
+      "status": "WORKING"
+    },
+    "screening_hub": {
+      "features": ["Integration status cards with DEMO badge", "Individual screening form", "Check toggles (sanctions, pep, kyc)", "Run screening with results", "Batch screening"],
+      "status": "WORKING"
+    },
+    "customer_detail_kyc": {
+      "features": ["KYC Verification Card with DEMO MODE badge", "5 document tabs (PAN, Aadhaar, Passport, Voter ID, DL)", "Verify button", "Verification history"],
+      "status": "WORKING"
+    },
+    "sidebar_navigation": {
+      "items": ["Dashboard", "Customers", "Screening", "Cases", "API Keys", "Audit Logs", "Settings"],
+      "status": "WORKING"
+    },
+    "backend_apis": {
+      "kyc_endpoints": ["/api/kyc/verify-pan", "/api/kyc/verify-aadhaar", "/api/kyc/verify-passport", "/api/kyc/verify-voter-id", "/api/kyc/verify-driving-license", "/api/kyc/verifications/{customerId}", "/api/kyc/status"],
+      "api_key_endpoints": ["/api/api-keys", "/api/api-keys/usage", "/api/api-keys/integration-status", "/api/api-keys/{id}/revoke"],
+      "v1_public_endpoints": ["/api/v1/screen", "/api/v1/screening/individual", "/api/v1/screening/batch", "/api/v1/risk/score"],
+      "screening_endpoints": ["/api/screening/run-quick"],
+      "status": "ALL WORKING"
+    }
+  }
+}

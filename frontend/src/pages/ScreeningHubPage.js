@@ -1,250 +1,397 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useCallback } from "react";
 import axios from "axios";
-import { Search, Shield, AlertTriangle, FileSearch, User } from "lucide-react";
+import { Search, Shield, Users, AlertTriangle, Loader2, CheckCircle, XCircle } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-export default function ScreeningHubPage() {
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [screeningResults, setScreeningResults] = useState(null);
-  const [screening, setScreening] = useState(false);
-  const navigate = useNavigate();
+const RISK_COLORS = {
+  LOW: "#10b981",
+  MEDIUM: "#f59e0b",
+  HIGH: "#ef4444",
+  CRITICAL: "#dc2626",
+};
 
-  const fetchCustomers = useCallback(async () => {
+export default function ScreeningHubPage() {
+  const [tab, setTab] = useState("individual");
+  const [name, setName] = useState("");
+  const [dob, setDob] = useState("");
+  const [nationality, setNationality] = useState("");
+  const [idType, setIdType] = useState("");
+  const [idNumber, setIdNumber] = useState("");
+  const [checks, setChecks] = useState(["sanctions", "pep"]);
+  const [batchText, setBatchText] = useState("");
+  const [result, setResult] = useState(null);
+  const [batchResult, setBatchResult] = useState(null);
+  const [screening, setScreening] = useState(false);
+  const [integrationStatus, setIntegrationStatus] = useState(null);
+
+  const fetchStatus = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API}/customers?limit=100`, {
-        withCredentials: true
-      });
-      setCustomers(data.customers || []);
-    } catch (error) {
-      console.error("Failed to fetch customers:", error);
-    } finally {
-      setLoading(false);
+      const { data } = await axios.get(`${API}/api-keys/integration-status`, { withCredentials: true });
+      setIntegrationStatus(data);
+    } catch (err) {
+      console.error("Failed to fetch integration status");
     }
   }, []);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+  React.useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-  const runScreening = async (customerId) => {
+  const toggleCheck = (c) => {
+    setChecks((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]);
+  };
+
+  const runScreening = async () => {
+    if (!name.trim()) return;
     setScreening(true);
+    setResult(null);
     try {
+      const payload = {
+        name: name.trim(),
+        checks,
+        dateOfBirth: dob || undefined,
+        nationality: nationality || undefined,
+      };
+      if (idType && idNumber) {
+        payload.idType = idType;
+        payload.idNumber = idNumber;
+        if (!checks.includes("kyc")) payload.checks = [...checks, "kyc"];
+      }
+
+      // Use internal screening endpoint (authenticated)
+      const { data } = await axios.post(`${API}/screening/run-quick`, payload, {
+        withCredentials: true,
+      });
+      setResult(data);
+    } catch (err) {
+      // Fallback: try using v1 public API if available
+      try {
+        const keysRes = await axios.get(`${API}/api-keys`, { withCredentials: true });
+        const activeKey = keysRes.data.api_keys?.find((k) => k.is_active);
+        if (activeKey) {
+          const payload = { name: name.trim(), checks, nationality: nationality || undefined };
+          const { data } = await axios.post(
+            `${process.env.REACT_APP_BACKEND_URL}/api/v1/screen`,
+            payload,
+            { headers: { "X-API-Key": activeKey.api_key } }
+          );
+          setResult(data);
+        } else {
+          setResult({ error: "No active API keys. Create one in API Keys page." });
+        }
+      } catch (innerErr) {
+        setResult({ error: innerErr.response?.data?.detail || "Screening failed" });
+      }
+    } finally {
+      setScreening(false);
+    }
+  };
+
+  const runBatchScreening = async () => {
+    const lines = batchText.trim().split("\n").filter(Boolean);
+    if (lines.length === 0) return;
+    setScreening(true);
+    setBatchResult(null);
+    try {
+      const individuals = lines.map((line) => {
+        const parts = line.split(",").map((s) => s.trim());
+        return { name: parts[0], nationality: parts[1] || undefined };
+      });
+      const keysRes = await axios.get(`${API}/api-keys`, { withCredentials: true });
+      const activeKey = keysRes.data.api_keys?.find((k) => k.is_active);
+      if (!activeKey) {
+        setBatchResult({ error: "No active API keys. Create one first." });
+        return;
+      }
       const { data } = await axios.post(
-        `${API}/screening/run/${customerId}`,
-        {},
-        { withCredentials: true }
+        `${process.env.REACT_APP_BACKEND_URL}/api/v1/screening/batch`,
+        { individuals },
+        { headers: { "X-API-Key": activeKey.api_key } }
       );
-      setScreeningResults(data.results);
-    } catch (error) {
-      console.error("Screening failed:", error);
+      setBatchResult(data);
+    } catch (err) {
+      setBatchResult({ error: err.response?.data?.detail || "Batch screening failed" });
     } finally {
       setScreening(false);
     }
   };
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 style={{
-          fontSize: "26px",
-          fontWeight: "700",
-          letterSpacing: "-0.5px",
-          color: "#f1f5f9",
-          marginBottom: "8px"
-        }} data-testid="screening-title">Screening Hub</h1>
+    <div data-testid="screening-hub-page">
+      <div className="mb-8">
+        <h1 style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#f1f5f9", marginBottom: "8px" }}
+            data-testid="screening-hub-title">
+          Screening Hub
+        </h1>
         <p style={{ color: "#94a3b8", fontSize: "14px" }}>
           Run sanctions, PEP, and adverse media screenings
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Customer Selection */}
-        <div style={{
-          background: "#0d1117",
-          border: "1px solid #1e2530",
-          borderRadius: "12px",
-          padding: "24px"
-        }}>
-          <h2 style={{
-            fontSize: "13px",
-            fontWeight: "700",
-            color: "#f1f5f9",
-            marginBottom: "16px"
-          }}>Select Customer to Screen</h2>
-          
-          <div className="space-y-3">
-            {loading ? (
-              <p style={{ color: "#94a3b8" }}>Loading customers...</p>
-            ) : customers.length === 0 ? (
-              <p style={{ color: "#94a3b8" }}>No customers found</p>
-            ) : (
-              customers.map((customer) => (
-                <div
-                  key={customer.id}
-                  onClick={() => setSelectedCustomer(customer)}
-                  style={{
-                    padding: "12px",
-                    background: selectedCustomer?.id === customer.id ? "#1e2530" : "#080c12",
-                    border: `1px solid ${selectedCustomer?.id === customer.id ? "#2563eb" : "#1e2530"}`,
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    transition: "all 0.2s"
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedCustomer?.id !== customer.id) {
-                      e.currentTarget.style.background = "#1e2530";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedCustomer?.id !== customer.id) {
-                      e.currentTarget.style.background = "#080c12";
-                    }
-                  }}
-                >
-                  <div style={{ color: "#f1f5f9", fontSize: "14px", fontWeight: "500", marginBottom: "4px" }}>
-                    {customer.customer_data?.full_name || customer.customer_data?.company_legal_name || "Unnamed"}
-                  </div>
-                  <div style={{ color: "#475569", fontSize: "12px" }}>
-                    {customer.customer_type} • {customer.id}
-                  </div>
+      {/* Integration Status */}
+      {integrationStatus && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {Object.entries(integrationStatus).map(([svc, info]) => (
+            <div key={svc} className="card-aml" style={{ padding: "16px" }} data-testid={`integration-status-${svc}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield style={{ width: 16, height: 16, color: info.mode === "live" ? "#10b981" : "#f59e0b" }} />
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#f1f5f9", textTransform: "capitalize" }}>
+                    {svc}
+                  </span>
                 </div>
-              ))
-            )}
+                <span style={{
+                  fontSize: "10px", fontWeight: 700, padding: "3px 8px", borderRadius: "4px",
+                  color: info.mode === "live" ? "#10b981" : "#f59e0b",
+                  background: info.mode === "live" ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+                  textTransform: "uppercase",
+                }}>
+                  {info.mode}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        {[
+          { key: "individual", label: "Individual", icon: Search },
+          { key: "batch", label: "Batch", icon: Users },
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            data-testid={`screening-tab-${key}`}
+            style={{
+              display: "flex", alignItems: "center", gap: "8px", padding: "10px 20px",
+              borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+              border: tab === key ? "1px solid #2563eb" : "1px solid #1e2530",
+              background: tab === key ? "rgba(37,99,235,0.12)" : "#0d1117",
+              color: tab === key ? "#60a5fa" : "#94a3b8",
+              transition: "all 0.2s",
+            }}
+          >
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "individual" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Form */}
+          <div className="lg:col-span-2">
+            <div className="card-aml">
+              <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9", marginBottom: "16px" }}>
+                Individual Screening
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px", display: "block" }}>Full Name *</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                    placeholder="John Smith" className="input-aml w-full" data-testid="screening-name-input" />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px", display: "block" }}>Nationality</label>
+                  <input type="text" value={nationality} onChange={(e) => setNationality(e.target.value)}
+                    placeholder="US" className="input-aml w-full" data-testid="screening-nationality-input" />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px", display: "block" }}>Date of Birth</label>
+                  <input type="date" value={dob} onChange={(e) => setDob(e.target.value)}
+                    className="input-aml w-full" data-testid="screening-dob-input"
+                    style={{ colorScheme: "dark" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px", display: "block" }}>ID Type</label>
+                  <select value={idType} onChange={(e) => setIdType(e.target.value)}
+                    className="input-aml w-full" data-testid="screening-id-type"
+                    style={{ colorScheme: "dark" }}>
+                    <option value="">None</option>
+                    <option value="PAN">PAN</option>
+                    <option value="AADHAAR">Aadhaar</option>
+                    <option value="PASSPORT">Passport</option>
+                    <option value="VOTER_ID">Voter ID</option>
+                    <option value="DL">Driving License</option>
+                  </select>
+                </div>
+                {idType && (
+                  <div className="md:col-span-2">
+                    <label style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px", display: "block" }}>ID Number</label>
+                    <input type="text" value={idNumber} onChange={(e) => setIdNumber(e.target.value)}
+                      placeholder="Enter ID number" className="input-aml w-full" data-testid="screening-id-number" />
+                  </div>
+                )}
+              </div>
+
+              {/* Checks */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "8px", display: "block" }}>Checks</label>
+                <div className="flex gap-2 flex-wrap">
+                  {["sanctions", "pep", "kyc"].map((c) => (
+                    <button key={c} onClick={() => toggleCheck(c)}
+                      data-testid={`check-${c}`}
+                      style={{
+                        padding: "6px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                        border: checks.includes(c) ? "1px solid #2563eb" : "1px solid #1e2530",
+                        background: checks.includes(c) ? "rgba(37,99,235,0.15)" : "transparent",
+                        color: checks.includes(c) ? "#60a5fa" : "#94a3b8",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={runScreening} disabled={screening || !name.trim()}
+                className="btn-primary" data-testid="run-screening-btn"
+                style={{ display: "flex", alignItems: "center", gap: "8px", opacity: screening ? 0.5 : 1 }}>
+                {screening ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                {screening ? "Screening..." : "Run Screening"}
+              </button>
+            </div>
           </div>
 
-          {selectedCustomer && (
-            <button
-              onClick={() => runScreening(selectedCustomer.id)}
-              disabled={screening}
-              style={{
-                marginTop: "16px",
-                width: "100%",
-                background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(37, 99, 235, 0.3)",
-                color: "#ffffff",
-                fontWeight: "600",
-                padding: "12px",
-                border: "none",
-                cursor: screening ? "not-allowed" : "pointer",
-                fontSize: "14px"
-              }}
-            >
-              {screening ? "Screening..." : "Run Full Screening"}
-            </button>
+          {/* Result */}
+          <div>
+            {result && !result.error && (
+              <div className="card-aml" data-testid="screening-result">
+                <h3 style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9", marginBottom: "12px" }}>
+                  Result
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#475569", marginBottom: "2px" }}>Risk Level</div>
+                    <span style={{
+                      fontSize: "18px", fontWeight: 700,
+                      color: RISK_COLORS[result.riskLevel] || RISK_COLORS[result.risk_level] || "#94a3b8",
+                    }}>
+                      {result.riskLevel || result.risk_level || "N/A"}
+                    </span>
+                  </div>
+                  {result.sanctions && (
+                    <div className="flex items-center justify-between">
+                      <span style={{ fontSize: "13px", color: "#94a3b8" }}>Sanctions</span>
+                      <span style={{
+                        display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600,
+                        color: result.sanctions.status === "clear" ? "#10b981" : "#ef4444",
+                      }}>
+                        {result.sanctions.status === "clear" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {result.sanctions.status}
+                      </span>
+                    </div>
+                  )}
+                  {result.pep && (
+                    <div className="flex items-center justify-between">
+                      <span style={{ fontSize: "13px", color: "#94a3b8" }}>PEP</span>
+                      <span style={{
+                        display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600,
+                        color: result.pep.status === "clear" ? "#10b981" : "#ef4444",
+                      }}>
+                        {result.pep.status === "clear" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {result.pep.status}
+                      </span>
+                    </div>
+                  )}
+                  {result.kyc && (
+                    <div className="flex items-center justify-between">
+                      <span style={{ fontSize: "13px", color: "#94a3b8" }}>KYC</span>
+                      <span style={{
+                        display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 600,
+                        color: result.kyc.status === "verified" ? "#10b981" : "#ef4444",
+                      }}>
+                        {result.kyc.status === "verified" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {result.kyc.status}
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ fontSize: "11px", color: "#475569", borderTop: "1px solid #1e2530", paddingTop: "8px" }}>
+                    Mode: {result.mode || "demo"} • {new Date(result.completedAt || result.screened_at).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            )}
+            {result?.error && (
+              <div className="card-aml" style={{ borderColor: "rgba(239,68,68,0.3)" }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle style={{ color: "#ef4444", width: 16, height: 16 }} />
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#ef4444" }}>Error</span>
+                </div>
+                <p style={{ fontSize: "13px", color: "#94a3b8" }}>{result.error}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "batch" && (
+        <div className="card-aml">
+          <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9", marginBottom: "8px" }}>
+            Batch Screening
+          </h2>
+          <p style={{ fontSize: "12px", color: "#475569", marginBottom: "12px" }}>
+            Enter one person per line: Name, Nationality (max 50)
+          </p>
+          <textarea
+            value={batchText}
+            onChange={(e) => setBatchText(e.target.value)}
+            rows={8}
+            className="input-aml w-full"
+            data-testid="batch-input"
+            placeholder={"John Smith, US\nJane Doe, GB\nAhmed Khan, PK"}
+            style={{ resize: "vertical", fontSize: "13px", fontFamily: "monospace" }}
+          />
+          <button onClick={runBatchScreening} disabled={screening || !batchText.trim()}
+            className="btn-primary mt-4" data-testid="run-batch-btn"
+            style={{ display: "flex", alignItems: "center", gap: "8px", opacity: screening ? 0.5 : 1 }}>
+            {screening ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+            {screening ? "Processing..." : "Run Batch"}
+          </button>
+
+          {batchResult && !batchResult.error && (
+            <div style={{ marginTop: "20px" }} data-testid="batch-result">
+              <h3 style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9", marginBottom: "12px" }}>
+                Batch Results — {batchResult.summary?.total || 0} screened
+              </h3>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: "High Risk", val: batchResult.summary?.high || 0, color: "#ef4444" },
+                  { label: "Medium", val: batchResult.summary?.medium || 0, color: "#f59e0b" },
+                  { label: "Low", val: batchResult.summary?.low || 0, color: "#10b981" },
+                ].map((s) => (
+                  <div key={s.label} style={{ textAlign: "center", padding: "12px", background: "#080c12", borderRadius: "8px" }}>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: s.color }}>{s.val}</div>
+                    <div style={{ fontSize: "11px", color: "#475569" }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {batchResult.results?.map((r, i) => (
+                  <div key={r.screening_id || i} className="flex items-center justify-between"
+                    style={{ padding: "8px 12px", background: "#080c12", borderRadius: "6px", border: "1px solid #1e2530" }}>
+                    <span style={{ fontSize: "13px", color: "#f1f5f9" }}>{r.screened_name}</span>
+                    <span style={{
+                      fontSize: "11px", fontWeight: 700, padding: "3px 8px", borderRadius: "4px",
+                      color: RISK_COLORS[r.risk_level] || "#94a3b8",
+                      background: `${RISK_COLORS[r.risk_level] || "#94a3b8"}22`,
+                    }}>
+                      {r.risk_level}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {batchResult?.error && (
+            <div style={{ marginTop: "16px", padding: "12px", background: "rgba(239,68,68,0.08)", borderRadius: "8px", color: "#ef4444", fontSize: "13px" }}>
+              {batchResult.error}
+            </div>
           )}
         </div>
-
-        {/* Screening Results */}
-        <div style={{
-          background: "#0d1117",
-          border: "1px solid #1e2530",
-          borderRadius: "12px",
-          padding: "24px"
-        }}>
-          <h2 style={{
-            fontSize: "13px",
-            fontWeight: "700",
-            color: "#f1f5f9",
-            marginBottom: "16px"
-          }}>Screening Results</h2>
-
-          {!screeningResults ? (
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#475569" }}>
-              <FileSearch className="w-12 h-12 mx-auto mb-4" />
-              <p>Select a customer and run screening to see results</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Sanctions */}
-              <div style={{
-                background: "#080c12",
-                border: "1px solid #1e2530",
-                borderRadius: "8px",
-                padding: "16px"
-              }}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-5 h-5" style={{ color: "#2563eb" }} />
-                    <span style={{ color: "#f1f5f9", fontSize: "14px", fontWeight: "600" }}>
-                      Sanctions Screening
-                    </span>
-                  </div>
-                  <span className={`status-badge status-${
-                    screeningResults.sanctions?.status === "confirmed_match" ? "danger" :
-                    screeningResults.sanctions?.status === "potential_match" ? "warning" : "success"
-                  }`}>
-                    {screeningResults.sanctions?.status.replace("_", " ")}
-                  </span>
-                </div>
-                {screeningResults.sanctions?.status !== "no_match" && (
-                  <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    Match detected - Review required
-                  </div>
-                )}
-              </div>
-
-              {/* PEP */}
-              <div style={{
-                background: "#080c12",
-                border: "1px solid #1e2530",
-                borderRadius: "8px",
-                padding: "16px"
-              }}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <User className="w-5 h-5" style={{ color: "#2563eb" }} />
-                    <span style={{ color: "#f1f5f9", fontSize: "14px", fontWeight: "600" }}>
-                      PEP Screening
-                    </span>
-                  </div>
-                  <span className={`status-badge status-${
-                    screeningResults.pep?.is_pep ? "warning" : "success"
-                  }`}>
-                    {screeningResults.pep?.is_pep ? "PEP Detected" : "No Match"}
-                  </span>
-                </div>
-                {screeningResults.pep?.is_pep && (
-                  <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    Politically Exposed Person identified
-                  </div>
-                )}
-              </div>
-
-              {/* Adverse Media */}
-              <div style={{
-                background: "#080c12",
-                border: "1px solid #1e2530",
-                borderRadius: "8px",
-                padding: "16px"
-              }}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5" style={{ color: "#2563eb" }} />
-                    <span style={{ color: "#f1f5f9", fontSize: "14px", fontWeight: "600" }}>
-                      Adverse Media
-                    </span>
-                  </div>
-                  <span className={`status-badge status-${
-                    screeningResults.adverse_media?.has_hits ? "warning" : "success"
-                  }`}>
-                    {screeningResults.adverse_media?.has_hits ? "Hits Found" : "No Hits"}
-                  </span>
-                </div>
-                {screeningResults.adverse_media?.has_hits && (
-                  <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    Negative media coverage found
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

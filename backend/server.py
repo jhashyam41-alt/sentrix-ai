@@ -415,13 +415,73 @@ async def get_dashboard_stats(request: Request):
         {"_id": 0}
     ).sort("created_at", -1).limit(5).to_list(5)
     
+    # KYC Verification Stats
+    total_kyc = await db.kyc_verifications.count_documents({"tenant_id": tenant_id})
+    kyc_verified = await db.kyc_verifications.count_documents({"tenant_id": tenant_id, "verification_status": "verified"})
+    kyc_failed = await db.kyc_verifications.count_documents({"tenant_id": tenant_id, "verification_status": "failed"})
+    
+    # Risk distribution
+    risk_low = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "low"})
+    risk_medium = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "medium"})
+    risk_high = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "high"})
+    risk_unacceptable = await db.customers.count_documents({"tenant_id": tenant_id, "risk_level": "unacceptable"})
+    
+    # Screening stats
+    pep_matches = await db.customers.count_documents({"tenant_id": tenant_id, "pep_status": "match"})
+    sanctions_matches = await db.customers.count_documents({"tenant_id": tenant_id, "sanctions_status": "potential_match"})
+    adverse_media_hits = await db.customers.count_documents({"tenant_id": tenant_id, "adverse_media_status": "hits_found"})
+    
+    # API usage (for super_admin)
+    api_usage = {}
+    if user["role"] == "super_admin":
+        keys = await db.api_keys.find({"tenant_id": tenant_id}, {"_id": 0, "id": 1}).to_list(50)
+        key_ids = [k["id"] for k in keys]
+        total_api_calls = await db.api_call_logs.count_documents({"client_id": {"$in": key_ids}}) if key_ids else 0
+        active_keys = await db.api_keys.count_documents({"tenant_id": tenant_id, "is_active": True})
+        api_usage = {
+            "total_api_calls": total_api_calls,
+            "active_api_keys": active_keys,
+        }
+    
+    # CDD tier breakdown
+    cdd_sdd = await db.customers.count_documents({"tenant_id": tenant_id, "cdd_tier": "sdd"})
+    cdd_standard = await db.customers.count_documents({"tenant_id": tenant_id, "cdd_tier": "standard_cdd"})
+    cdd_edd = await db.customers.count_documents({"tenant_id": tenant_id, "cdd_tier": "edd"})
+    
+    # Integration status
+    from services.signzy_service import get_service_status as signzy_status
+    from services.opensanctions_service import get_service_status as os_status
+    
     return {
         "total_customers": total_customers,
         "pending_reviews": pending_reviews,
         "high_risk_customers": high_risk,
         "open_cases": open_cases,
         "recent_customers": recent_customers,
-        "open_cases_list": open_cases_list
+        "open_cases_list": open_cases_list,
+        "kyc_stats": {
+            "total": total_kyc,
+            "verified": kyc_verified,
+            "failed": kyc_failed,
+        },
+        "risk_distribution": {
+            "low": risk_low,
+            "medium": risk_medium,
+            "high": risk_high,
+            "unacceptable": risk_unacceptable,
+        },
+        "screening_stats": {
+            "pep_matches": pep_matches,
+            "sanctions_matches": sanctions_matches,
+            "adverse_media_hits": adverse_media_hits,
+        },
+        "cdd_breakdown": {
+            "sdd": cdd_sdd,
+            "standard_cdd": cdd_standard,
+            "edd": cdd_edd,
+        },
+        "api_usage": api_usage,
+        "integrations": {**signzy_status(), **os_status()},
     }
 
 # ===================================
@@ -1371,6 +1431,67 @@ async def screen_pep(customer_id: str, request: Request):
 # SCREENING ROUTES (MOCK)
 # ===================================
 
+@api_router.post("/screening/run-quick")
+async def run_quick_screening(data: dict, request: Request):
+    """Quick screening from the Screening Hub (no customer required)."""
+    user = await get_current_user(request, db)
+
+    name = data.get("name", "")
+    if not name:
+        raise HTTPException(400, "name is required")
+
+    checks = data.get("checks", ["sanctions", "pep"])
+    nationality = data.get("nationality")
+    dob = data.get("dateOfBirth")
+    id_type = data.get("idType")
+    id_number = data.get("idNumber")
+
+    result = {
+        "screeningId": f"scr_{uuid.uuid4().hex[:12]}",
+        "status": "completed",
+        "name": name,
+        "checks_requested": checks,
+    }
+
+    # KYC check
+    if "kyc" in checks and id_type and id_number:
+        from services import signzy_service
+        kyc_fn = {
+            "PAN": lambda: signzy_service.verify_pan(id_number, name),
+            "AADHAAR": lambda: signzy_service.verify_aadhaar(id_number),
+            "VOTER_ID": lambda: signzy_service.verify_voter_id(id_number),
+            "PASSPORT": lambda: signzy_service.verify_passport(id_number),
+            "DL": lambda: signzy_service.verify_driving_license(id_number),
+        }.get(id_type.upper() if id_type else "")
+        if kyc_fn:
+            result["kyc"] = await kyc_fn()
+
+    # Sanctions + PEP
+    if "sanctions" in checks or "pep" in checks:
+        from services.opensanctions_service import screen_individual as svc_screen
+        screening = await svc_screen(name, dob, nationality)
+        if "sanctions" in checks:
+            result["sanctions"] = {
+                "status": "match" if screening.get("has_sanction_match") else "clear",
+                "matches": [m for m in screening.get("matches", []) if "sanction" in m.get("topics", [])],
+            }
+        if "pep" in checks:
+            result["pep"] = {
+                "status": "match" if screening.get("has_pep_match") else "clear",
+                "matches": [m for m in screening.get("matches", []) if "role.pep" in m.get("topics", [])],
+            }
+        result["riskLevel"] = screening.get("risk_level", "LOW")
+        result["riskScore"] = int(screening.get("top_score", 0) * 100)
+
+    result["completedAt"] = datetime.now(timezone.utc).isoformat()
+    result["mode"] = "demo"
+
+    await log_audit(user["tenant_id"], user, "quick_screening_run", "screening", None,
+                   {"name": name, "checks": checks}, request)
+
+    return result
+
+
 @api_router.post("/screening/run/{customer_id}")
 async def run_screening(customer_id: str, request: Request):
     user = await get_current_user(request, db)
@@ -1453,8 +1574,16 @@ async def run_screening(customer_id: str, request: Request):
     
     return {"message": "Screening completed", "results": screening_results}
 
-# Include router
+# Include routers
 app.include_router(api_router)
+
+# Include modular routers (lazy-import to avoid circular deps)
+from routes.kyc_routes import router as kyc_router
+from routes.v1_routes import router as v1_router
+from routes.api_key_routes import router as api_key_router
+app.include_router(kyc_router)
+app.include_router(v1_router)
+app.include_router(api_key_router)
 
 # CORS
 app.add_middleware(

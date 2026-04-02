@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Shield, LayoutDashboard, Users, FileSearch, AlertCircle,
-  FileText, Settings, LogOut, Bell
+  FileText, Settings, LogOut, Bell, Key
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -16,6 +16,7 @@ export default function Sidebar() {
     { path: "/customers", icon: Users, label: "Customers" },
     { path: "/screening", icon: FileSearch, label: "Screening" },
     { path: "/cases", icon: AlertCircle, label: "Cases" },
+    { path: "/api-keys", icon: Key, label: "API Keys" },
     { path: "/audit-logs", icon: FileText, label: "Audit Logs" },
     { path: "/settings", icon: Settings, label: "Settings" }
   ];

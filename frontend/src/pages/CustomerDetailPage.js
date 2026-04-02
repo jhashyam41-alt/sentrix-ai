@@ -6,6 +6,7 @@ import { PEPScreeningCard } from "../components/customers/PEPScreeningCard";
 import { AdverseMediaCard } from "../components/customers/AdverseMediaCard";
 import { CDDManagementCard } from "../components/customers/CDDManagementCard";
 import { RelatedCasesCard } from "../components/customers/RelatedCasesCard";
+import { KYCVerificationCard } from "../components/customers/KYCVerificationCard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -259,6 +260,11 @@ export default function CustomerDetailPage() {
               )}
             </div>
           </div>
+
+          <KYCVerificationCard
+            customerId={id}
+            customerName={customer.customer_data?.full_name || customer.customer_data?.company_legal_name}
+          />
 
           <PEPScreeningCard
             pepScreening={pepScreening}

@@ -80,9 +80,9 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/-e 
-# Environment files
-*.env
-*.env.*
+# Environment files (kept in repo for Emergent deployment)
+# *.env
+# *.env.*
 frontend/node_modules/.cache/default-development/9.pack
 frontend/node_modules/.cache/default-development/10.pack
 frontend/node_modules/.cache/default-development/13.pack

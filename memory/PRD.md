@@ -1,7 +1,15 @@
-# AMLGuard — Product Requirements Document
+# Rudrik — Product Requirements Document
 
 ## Problem Statement
 Build a production-ready, multi-tenant AML/KYC SaaS platform for financial institutions.
+
+## Brand
+- **Name**: Rudrik
+- **Tagline**: Compliance Intelligence
+- **Logo**: Trishul-inspired SVG mark (3-pronged weapon + lightning bolt) in accent blue (#2563eb)
+- **Copyright**: © 2026 Rudrik Technologies Private Limited
+- **Emails**: team@rudrik.io / admin@rudrik.io
+- **API Base URL**: https://api.rudrik.io/v1
 
 ## Architecture
 - **Frontend**: React, Tailwind CSS, Shadcn UI, Recharts, @dnd-kit/core, DM Sans font, dark theme (#080c12)
@@ -10,18 +18,12 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 - **Auth**: JWT + 2FA (TOTP), 4 roles
 
 ## Completed Features
-
-### Phase 1-5 — Core Platform + Customers + Screening (DONE)
-### Phase 6 — Cases Kanban Board (DONE)
-### Phase 7 — Audit Logs Redesign (DONE)
-### Phase 8 — Settings Page (DONE)
-
-### Phase 9 — Premium Dashboard (DONE - Feb 2026)
-- Count-up animations, sparkline mini-charts, animated donut chart, India heat map, Integration Status cards
-- **Quick Screen bar** at top: "Enter name or ID to screen instantly..." → navigates to /screening?q=
-- **Last Updated timestamp** + Refresh button next to title
-- **Live Activity Feed**: 15 diverse entries (KYC Verified, PEP Match Found, High Risk Alert, Case Resolved, SAR Filed, Customer Onboarded, Case Assigned, Case Status Changed, New Case Opened, Logged In) — each with distinct icon colors (green/red/orange/teal/gray)
-- `seed_recent_activity()`: 15 seconds-based entries refreshed on every startup for always-fresh feed
+- Phase 1-5: Core Platform, Customers, Screening (MOCKED Signzy/OpenSanctions)
+- Phase 6: Cases Kanban Board (DnD, Resolution Modal, SAR Generation)
+- Phase 7: Audit Logs (Colored labels, expandable rows, CSV export, 100 entries)
+- Phase 8: Settings (6 tabs: General, Risk Scoring, Integrations, Notifications, Team, Compliance)
+- Phase 9: Premium Dashboard (Count-up, Sparklines, Donut, India Map, Activity Feed, Quick Screen)
+- Phase 10: Full Rebrand (AMLGuard → Rudrik) — All UI, backend, meta tags, emails, SAR reports
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports

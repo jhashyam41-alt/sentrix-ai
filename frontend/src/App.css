@@ -51,3 +51,15 @@ button:focus {
 ::-webkit-scrollbar-thumb:hover {
   background: #2563eb;
 }
+
+
+/* Cases Kanban animations */
+@keyframes casePanelSlideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes caseModalFadeIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

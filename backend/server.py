@@ -74,6 +74,8 @@ async def startup_event():
     await seed_demo_screenings()
     # Seed demo customers
     await seed_demo_customers()
+    # Seed demo cases
+    await seed_demo_cases()
 
 async def create_default_tenant(db):
     """Create default tenant if it doesn't exist"""
@@ -567,6 +569,111 @@ async def seed_demo_customers():
         await db.customer_notes.insert_many(note_docs)
     logger.info(f"Seeded {len(docs)} demo customers, {len(timeline_docs)} timeline events, {len(note_docs)} notes")
 
+async def seed_demo_cases():
+    """Seed 8 demo cases linked to existing demo customers."""
+    count = await db.cases.count_documents({"tenant_id": "default-tenant", "mode": "demo"})
+    if count >= 8:
+        return
+
+    import random
+
+    DEMO_CASES = [
+        {"customer_name": "Rajendra Prasad Yadav", "case_type": "pep_match", "priority": "critical", "status": "open", "days_ago": 10, "assigned_to": None,
+         "description": "PEP Match — MLA Bihar. Tier 1 politically exposed person requiring enhanced due diligence."},
+        {"customer_name": "Balakrishnan Nair Pillai", "case_type": "sanctions_match", "priority": "critical", "status": "in_progress", "days_ago": 5, "assigned_to": "Priya Sharma",
+         "description": "Potential sanctions match detected. Former Secretary Ministry of Finance flagged on screening."},
+        {"customer_name": "Smt. Laxmi Devi Sharma", "case_type": "pep_match", "priority": "high", "status": "escalated", "days_ago": 8, "assigned_to": "Anita Desai",
+         "description": "PEP Match — State Cabinet Minister Rajasthan. Escalated for MLRO review."},
+        {"customer_name": "Kabir Singhania", "case_type": "adverse_media", "priority": "medium", "status": "open", "days_ago": 2, "assigned_to": None,
+         "description": "Adverse media hits found relating to import/export irregularities."},
+        {"customer_name": "Manish Tiwari", "case_type": "suspicious_transaction", "priority": "high", "status": "in_progress", "days_ago": 4, "assigned_to": "Rahul Verma",
+         "description": "Unusual transaction patterns flagged for money exchange operator. Multiple high-value transfers."},
+        {"customer_name": "Siddharth Malhotra", "case_type": "sanctions_match", "priority": "high", "status": "open", "days_ago": 6, "assigned_to": None,
+         "description": "Potential sanctions match in shipping logistics. OFAC watchlist partial match."},
+        {"customer_name": "Rohit Choudhary", "case_type": "adverse_media", "priority": "medium", "status": "closed", "days_ago": 15, "assigned_to": "Priya Sharma",
+         "description": "Adverse media investigation for real estate developer. Cleared after review.",
+         "sar_filed": True, "disposition": "sar_filed", "resolution_type": "true_match_sar_filed"},
+        {"customer_name": "Harish Pandey", "case_type": "suspicious_transaction", "priority": "medium", "status": "escalated", "days_ago": 1, "assigned_to": "Rahul Verma",
+         "description": "Mining business with unexplained fund sources. Escalated for enhanced review."},
+    ]
+
+    await db.cases.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
+    await db.case_notes.delete_many({"mode": "demo"})
+
+    base_time = datetime.now(timezone.utc)
+
+    for i, c in enumerate(DEMO_CASES):
+        customer = await db.customers.find_one(
+            {"tenant_id": "default-tenant", "customer_data.full_name": c["customer_name"]},
+            {"_id": 0, "id": 1, "risk_score": 1, "risk_level": 1}
+        )
+        customer_id = customer["id"] if customer else str(uuid.uuid4())
+        customer_risk = customer.get("risk_score", 50) if customer else 50
+        customer_risk_level = customer.get("risk_level", "medium") if customer else "medium"
+
+        created_at = base_time - timedelta(days=c["days_ago"], hours=i)
+        case_number = i + 1
+
+        case_doc = {
+            "id": str(uuid.uuid4()),
+            "case_id": f"CASE-{case_number:05d}",
+            "tenant_id": "default-tenant",
+            "customer_id": customer_id,
+            "customer_name": c["customer_name"],
+            "case_type": c["case_type"],
+            "priority": c["priority"],
+            "status": c["status"],
+            "assigned_to": c["assigned_to"],
+            "description": c["description"],
+            "customer_risk_score": customer_risk,
+            "customer_risk_level": customer_risk_level,
+            "due_date": (created_at + timedelta(days=14)).isoformat(),
+            "sar_filed": c.get("sar_filed", False),
+            "sar_reference": f"SAR-2025-{case_number:04d}" if c.get("sar_filed") else None,
+            "sar_filed_date": (created_at + timedelta(days=5)).isoformat() if c.get("sar_filed") else None,
+            "disposition": c.get("disposition"),
+            "disposition_note": "Investigation complete. SAR filed with FIU." if c.get("disposition") else None,
+            "resolution_type": c.get("resolution_type"),
+            "created_at": created_at.isoformat(),
+            "updated_at": (created_at + timedelta(hours=2)).isoformat(),
+            "created_by": "system",
+            "mode": "demo",
+        }
+
+        if c["status"] == "closed":
+            case_doc["closed_at"] = (created_at + timedelta(days=3)).isoformat()
+            case_doc["closed_by"] = "system"
+
+        await db.cases.insert_one(case_doc)
+
+        note_templates = [
+            {"note": f"Case auto-created by screening engine. {c['description']}", "is_system": True, "hours_offset": 0},
+            {"note": "Initial review completed. Documents collected for analysis.", "is_system": False, "hours_offset": 2},
+        ]
+        if c["status"] in ("in_progress", "escalated", "closed"):
+            note_templates.append({"note": "Investigation underway. Reviewing transaction history and source of funds.", "is_system": False, "hours_offset": 24})
+        if c["status"] == "escalated":
+            note_templates.append({"note": f"Case escalated to {c['assigned_to']} for senior review.", "is_system": True, "hours_offset": 48})
+        if c["status"] == "closed":
+            note_templates.append({"note": "Investigation complete. SAR filed with Financial Intelligence Unit.", "is_system": True, "hours_offset": 72})
+
+        for n in note_templates:
+            note_doc = {
+                "id": str(uuid.uuid4()),
+                "case_id": case_doc["id"],
+                "author_id": "system",
+                "author_name": c["assigned_to"] or "System",
+                "author_role": "compliance_officer",
+                "note": n["note"],
+                "is_system": n["is_system"],
+                "created_at": (created_at + timedelta(hours=n["hours_offset"])).isoformat(),
+                "mode": "demo",
+            }
+            await db.case_notes.insert_one(note_doc)
+
+    logger.info("Seeded 8 demo cases with notes")
+
+
 # ===================================
 # HELPER FUNCTIONS
 # ===================================
@@ -1006,6 +1113,33 @@ async def list_cases(
     return {
         "cases": cases,
         "total": total
+    }
+
+@api_router.get("/cases/stats")
+async def get_case_stats(request: Request):
+    user = await get_current_user(request, db)
+    tenant_id = user["tenant_id"]
+
+    pipeline = [
+        {"$match": {"tenant_id": tenant_id}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]
+    status_counts = {}
+    async for doc in db.cases.aggregate(pipeline):
+        status_counts[doc["_id"]] = doc["count"]
+
+    total = sum(status_counts.values())
+    sar_count = await db.cases.count_documents({"tenant_id": tenant_id, "sar_filed": True})
+    critical_count = await db.cases.count_documents({"tenant_id": tenant_id, "priority": "critical", "status": {"$ne": "closed"}})
+
+    return {
+        "total": total,
+        "open": status_counts.get("open", 0),
+        "in_progress": status_counts.get("in_progress", 0),
+        "escalated": status_counts.get("escalated", 0),
+        "closed": status_counts.get("closed", 0),
+        "sar_filed": sar_count,
+        "critical": critical_count,
     }
 
 @api_router.get("/cases/{case_id}")
@@ -1462,6 +1596,207 @@ async def update_case(case_id: str, data: dict, request: Request):
     await log_audit(user["tenant_id"], user, "case_updated", "cases", case_id, update_data, request)
     
     return {"message": "Case updated successfully"}
+
+@api_router.patch("/cases/{case_id}/status")
+async def quick_update_case_status(case_id: str, data: dict, request: Request):
+    """Quick status update for Kanban drag-and-drop."""
+    user = await get_current_user(request, db)
+
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    new_status = data.get("status")
+    valid_statuses = ["open", "in_progress", "escalated", "closed"]
+    if new_status not in valid_statuses:
+        raise HTTPException(400, f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+    old_status = case.get("status")
+    update_data = {
+        "status": new_status,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.cases.update_one({"id": case_id}, {"$set": update_data})
+
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": f"Status changed from {old_status.replace('_', ' ')} to {new_status.replace('_', ' ')}",
+        "is_system": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.case_notes.insert_one(note_doc)
+
+    await log_audit(user["tenant_id"], user, "case_status_changed", "cases", case_id,
+                   {"old_status": old_status, "new_status": new_status}, request)
+
+    return {"message": "Status updated", "old_status": old_status, "new_status": new_status}
+
+
+@api_router.post("/cases/{case_id}/resolve")
+async def resolve_case(case_id: str, data: dict, request: Request):
+    """Resolve a case with a resolution type."""
+    user = await get_current_user(request, db)
+
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    resolution_type = data.get("resolution_type")
+    valid_types = ["true_match_sar_filed", "true_match_risk_accepted", "false_positive", "duplicate"]
+    if resolution_type not in valid_types:
+        raise HTTPException(400, "Invalid resolution type")
+
+    resolution_labels = {
+        "true_match_sar_filed": "True Match — SAR Filed",
+        "true_match_risk_accepted": "True Match — Risk Accepted",
+        "false_positive": "False Positive",
+        "duplicate": "Duplicate",
+    }
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {
+        "status": "closed",
+        "resolution_type": resolution_type,
+        "disposition": resolution_type,
+        "disposition_note": f"Resolved as: {resolution_labels[resolution_type]}",
+        "closed_at": now,
+        "closed_by": user["id"],
+        "updated_at": now,
+    }
+
+    if resolution_type == "true_match_sar_filed" and not case.get("sar_filed"):
+        update_data["sar_filed"] = True
+        update_data["sar_reference"] = f"SAR-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
+        update_data["sar_filed_date"] = now
+
+    await db.cases.update_one({"id": case_id}, {"$set": update_data})
+
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": f"Case resolved: {resolution_labels[resolution_type]}",
+        "is_system": True,
+        "created_at": now,
+    }
+    await db.case_notes.insert_one(note_doc)
+
+    await log_audit(user["tenant_id"], user, "case_resolved", "cases", case_id,
+                   {"resolution_type": resolution_type, "label": resolution_labels[resolution_type]}, request)
+
+    return {"message": "Case resolved", "resolution_type": resolution_type}
+
+
+@api_router.put("/cases/{case_id}/assign")
+async def assign_case(case_id: str, data: dict, request: Request):
+    """Assign a case to a team member."""
+    user = await get_current_user(request, db)
+
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]})
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    assigned_to = data.get("assigned_to")
+    now = datetime.now(timezone.utc).isoformat()
+
+    await db.cases.update_one({"id": case_id}, {"$set": {"assigned_to": assigned_to, "updated_at": now}})
+
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        "case_id": case_id,
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "author_role": user["role"],
+        "note": f"Case assigned to {assigned_to}" if assigned_to else "Case unassigned",
+        "is_system": True,
+        "created_at": now,
+    }
+    await db.case_notes.insert_one(note_doc)
+
+    await log_audit(user["tenant_id"], user, "case_assigned", "cases", case_id,
+                   {"assigned_to": assigned_to}, request)
+
+    return {"message": "Case assigned", "assigned_to": assigned_to}
+
+
+@api_router.post("/cases/{case_id}/generate-sar")
+async def generate_sar_report(case_id: str, request: Request):
+    """Generate a mock SAR report with pre-filled data."""
+    user = await get_current_user(request, db)
+
+    case = await db.cases.find_one({"id": case_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    customer = await db.customers.find_one(
+        {"id": case["customer_id"], "tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    )
+
+    customer_data = customer.get("customer_data", {}) if customer else {}
+    sar_reference = f"SAR-{datetime.now(timezone.utc).strftime('%Y')}-{uuid.uuid4().hex[:6].upper()}"
+
+    report = {
+        "sar_reference": sar_reference,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_by": user["name"],
+        "case_id": case.get("case_id"),
+        "filing_institution": "AMLGuard — Sentrix AI",
+        "subject": {
+            "full_name": customer_data.get("full_name", case.get("customer_name", "Unknown")),
+            "date_of_birth": customer_data.get("date_of_birth", "N/A"),
+            "nationality": customer_data.get("nationality", "N/A"),
+            "occupation": customer_data.get("occupation", "N/A"),
+            "phone": customer_data.get("phone", "N/A"),
+            "email": customer_data.get("email", "N/A"),
+        },
+        "risk_assessment": {
+            "risk_score": customer.get("risk_score", "N/A") if customer else "N/A",
+            "risk_level": customer.get("risk_level", "N/A") if customer else "N/A",
+            "pep_status": customer.get("pep_status", "N/A") if customer else "N/A",
+            "sanctions_status": customer.get("sanctions_status", "N/A") if customer else "N/A",
+            "adverse_media": customer.get("adverse_media_status", "N/A") if customer else "N/A",
+        },
+        "case_details": {
+            "case_type": case.get("case_type", "").replace("_", " ").title(),
+            "priority": case.get("priority", "N/A"),
+            "description": case.get("description", "N/A"),
+            "created_at": case.get("created_at", "N/A"),
+            "assigned_to": case.get("assigned_to", "Unassigned"),
+        },
+        "narrative": (
+            f"This Suspicious Activity Report is filed in relation to {customer_data.get('full_name', case.get('customer_name', 'the subject'))}. "
+            f"The case was opened due to {case.get('case_type', 'compliance concern').replace('_', ' ')} with a risk score of "
+            f"{customer.get('risk_score', 'N/A') if customer else 'N/A'}/100 ({(customer.get('risk_level', 'N/A') if customer else 'N/A').upper()} risk). "
+            f"{case.get('description', '')}"
+        ),
+        "status": "DRAFT — Pending Review",
+    }
+
+    await log_audit(user["tenant_id"], user, "sar_report_generated", "cases", case_id,
+                   {"sar_reference": sar_reference}, request)
+
+    return report
+
+
+@api_router.get("/team-members")
+async def get_team_members(request: Request):
+    """Return demo team members for case assignment."""
+    await get_current_user(request, db)
+    return {
+        "members": [
+            {"id": "tm-001", "name": "Priya Sharma", "role": "Compliance Officer"},
+            {"id": "tm-002", "name": "Rahul Verma", "role": "Senior Analyst"},
+            {"id": "tm-003", "name": "Anita Desai", "role": "MLRO"},
+        ]
+    }
 
 # ===================================
 # CDD MANAGEMENT ROUTES

@@ -1,308 +1,160 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import logger from "../utils/logger";
-import { Plus, Search, AlertCircle, Clock, CheckCircle } from "lucide-react";
+import { KanbanBoard } from "../components/cases/KanbanBoard";
+import { CaseDetailPanel } from "../components/cases/CaseDetailPanel";
+import { ResolutionModal } from "../components/cases/ResolutionModal";
+import { AlertCircle, Shield, Flag, Clock } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const getPriorityColor = (priority) => {
-  if (priority === "critical" || priority === "high") return "danger";
-  if (priority === "medium") return "warning";
-  return "success";
-};
-
-const getStatusColor = (status) => {
-  if (status === "closed") return "success";
-  if (status === "escalated") return "danger";
-  if (status === "pending_info") return "warning";
-  return "low";
-};
-
 export default function CasesListPage() {
   const [cases, setCases] = useState([]);
+  const [stats, setStats] = useState({});
+  const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterPriority, setFilterPriority] = useState("");
-  const navigate = useNavigate();
+  const [selectedCase, setSelectedCase] = useState(null);
+  const [resolvingCase, setResolvingCase] = useState(null);
+  const [resolveLoading, setResolveLoading] = useState(false);
+  const [activeDragId, setActiveDragId] = useState(null);
 
-  const fetchCases = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterStatus) params.append("status", filterStatus);
-      if (filterPriority) params.append("priority", filterPriority);
-      
-      const { data } = await axios.get(`${API}/cases?${params}`, {
-        withCredentials: true
-      });
-      setCases(data.cases || []);
-    } catch (error) {
-      logger.error("Failed to fetch cases:", error);
+      const [casesRes, statsRes, teamRes] = await Promise.all([
+        axios.get(`${API}/cases`, { withCredentials: true }),
+        axios.get(`${API}/cases/stats`, { withCredentials: true }),
+        axios.get(`${API}/team-members`, { withCredentials: true }),
+      ]);
+      setCases(casesRes.data.cases || []);
+      setStats(statsRes.data);
+      setTeamMembers(teamRes.data.members || []);
+    } catch (err) {
+      logger.error("Failed to fetch cases data", err);
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, filterPriority]);
+  }, []);
 
   useEffect(() => {
-    fetchCases();
-  }, [fetchCases]);
+    fetchData();
+  }, [fetchData]);
+
+  const handleStatusChange = async (caseData, newStatus) => {
+    if (newStatus === "closed") {
+      setResolvingCase(caseData);
+      return;
+    }
+    // Optimistic update
+    setCases((prev) => prev.map((c) => c.id === caseData.id ? { ...c, status: newStatus } : c));
+    try {
+      await axios.patch(`${API}/cases/${caseData.id}/status`, { status: newStatus }, { withCredentials: true });
+      await fetchData();
+    } catch (err) {
+      logger.error("Failed to update status", err);
+      setCases((prev) => prev.map((c) => c.id === caseData.id ? { ...c, status: caseData.status } : c));
+    }
+  };
+
+  const handleResolve = async (resolutionType) => {
+    if (!resolvingCase) return;
+    setResolveLoading(true);
+    try {
+      await axios.post(`${API}/cases/${resolvingCase.id}/resolve`, { resolution_type: resolutionType }, { withCredentials: true });
+      setResolvingCase(null);
+      await fetchData();
+    } catch (err) {
+      logger.error("Failed to resolve case", err);
+    } finally {
+      setResolveLoading(false);
+    }
+  };
+
+  const statCards = [
+    { label: "Total Cases", value: stats.total || 0, icon: AlertCircle, color: "#2563eb" },
+    { label: "Open Alerts", value: stats.open || 0, icon: Clock, color: "#f59e0b" },
+    { label: "Escalated", value: stats.escalated || 0, icon: Shield, color: "#ef4444" },
+    { label: "SAR Filed", value: stats.sar_filed || 0, icon: Flag, color: "#a855f7" },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ padding: "60px", textAlign: "center", color: "#94a3b8" }}>
+        Loading cases...
+      </div>
+    );
+  }
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{
-            fontSize: "26px",
-            fontWeight: "700",
-            letterSpacing: "-0.5px",
-            color: "#f1f5f9",
-            marginBottom: "8px"
-          }} data-testid="cases-title">Case Management</h1>
+          <h1 style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#f1f5f9", marginBottom: "4px" }} data-testid="cases-title">
+            Case Management
+          </h1>
           <p style={{ color: "#94a3b8", fontSize: "14px" }}>
-            Manage compliance investigations and alerts
+            Drag cases between columns to update status
           </p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{
-        background: "#0d1117",
-        border: "1px solid #1e2530",
-        borderRadius: "12px",
-        padding: "20px",
-        marginBottom: "24px"
-      }}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label style={{
-              fontSize: "11px",
-              fontWeight: "600",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              color: "#475569",
-              marginBottom: "8px",
-              display: "block"
-            }}>Status</label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              data-testid="status-filter"
+      {/* Stats Bar */}
+      <div data-testid="cases-stats-bar" style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
+        {statCards.map((s) => {
+          const Icon = s.icon;
+          return (
+            <div
+              key={s.label}
+              data-testid={`stat-${s.label.toLowerCase().replace(/ /g, "-")}`}
               style={{
-                background: "#080c12",
-                border: "1px solid #1e2530",
-                borderRadius: "8px",
-                padding: "8px 12px",
-                color: "#f1f5f9",
-                fontSize: "14px",
-                width: "100%"
+                flex: 1, background: "#0d1117", border: "1px solid #1e2530",
+                borderRadius: "10px", padding: "16px 20px",
+                display: "flex", alignItems: "center", gap: "14px",
               }}
             >
-              <option value="">All Statuses</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="escalated">Escalated</option>
-              <option value="pending_info">Pending Info</option>
-              <option value="closed">Closed</option>
-            </select>
-          </div>
-          
-          <div>
-            <label style={{
-              fontSize: "11px",
-              fontWeight: "600",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              color: "#475569",
-              marginBottom: "8px",
-              display: "block"
-            }}>Priority</label>
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
-              data-testid="priority-filter"
-              style={{
-                background: "#080c12",
-                border: "1px solid #1e2530",
-                borderRadius: "8px",
-                padding: "8px 12px",
-                color: "#f1f5f9",
-                fontSize: "14px",
-                width: "100%"
-              }}
-            >
-              <option value="">All Priorities</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-        </div>
+              <div style={{
+                width: "40px", height: "40px", borderRadius: "10px",
+                background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon style={{ width: "18px", height: "18px", color: s.color }} />
+              </div>
+              <div>
+                <div style={{ fontSize: "22px", fontWeight: "700", color: "#f1f5f9" }}>{s.value}</div>
+                <div style={{ fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>{s.label}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Cases Table */}
-      <div style={{
-        background: "#0d1117",
-        border: "1px solid #1e2530",
-        borderRadius: "12px",
-        overflow: "hidden"
-      }}>
-        {loading ? (
-          <div style={{ padding: "60px", textAlign: "center", color: "#94a3b8" }}>
-            Loading cases...
-          </div>
-        ) : cases.length === 0 ? (
-          <div style={{ padding: "60px", textAlign: "center", color: "#94a3b8" }}>
-            <AlertCircle className="w-12 h-12 mx-auto mb-4" style={{ color: "#475569" }} />
-            <p>No cases found</p>
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #0f1520" }}>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Case ID</th>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Customer</th>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Type</th>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Priority</th>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Status</th>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Assigned To</th>
-                  <th style={{
-                    padding: "16px 24px",
-                    textAlign: "left",
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    textTransform: "uppercase",
-                    color: "#475569",
-                    letterSpacing: "1px"
-                  }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cases.map((caseItem, idx) => (
-                  <tr
-                    key={caseItem.id}
-                    style={{
-                      borderBottom: idx < cases.length - 1 ? "1px solid #0f1520" : "none",
-                      cursor: "pointer"
-                    }}
-                    onClick={() => navigate(`/cases/${caseItem.id}`)}
-                    data-testid={`case-row-${caseItem.id}`}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#1e2530";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    <td style={{ padding: "16px 24px" }}>
-                      <div style={{ color: "#2563eb", fontSize: "14px", fontWeight: "600" }}>
-                        {caseItem.case_id}
-                      </div>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <div style={{ color: "#f1f5f9", fontSize: "14px" }}>
-                        {caseItem.customer_name}
-                      </div>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <span style={{
-                        color: "#94a3b8",
-                        fontSize: "13px",
-                        textTransform: "capitalize"
-                      }}>
-                        {caseItem.case_type.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <span className={`status-badge status-${getPriorityColor(caseItem.priority)}`}>
-                        {caseItem.priority}
-                      </span>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <span className={`status-badge status-${getStatusColor(caseItem.status)}`}>
-                        {caseItem.status.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <span style={{ color: "#94a3b8", fontSize: "13px" }}>
-                        {caseItem.assigned_to || "Unassigned"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/cases/${caseItem.id}`);
-                        }}
-                        style={{
-                          background: "transparent",
-                          border: "1px solid #1e2530",
-                          borderRadius: "6px",
-                          padding: "6px 12px",
-                          color: "#94a3b8",
-                          fontSize: "12px",
-                          cursor: "pointer"
-                        }}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Kanban Board */}
+      <KanbanBoard
+        cases={cases}
+        onStatusChange={handleStatusChange}
+        onCardClick={setSelectedCase}
+        activeDragId={activeDragId}
+        setActiveDragId={setActiveDragId}
+      />
+
+      {/* Case Detail Panel */}
+      {selectedCase && (
+        <CaseDetailPanel
+          caseData={selectedCase}
+          teamMembers={teamMembers}
+          onClose={() => setSelectedCase(null)}
+          onUpdate={fetchData}
+        />
+      )}
+
+      {/* Resolution Modal */}
+      {resolvingCase && (
+        <ResolutionModal
+          caseData={resolvingCase}
+          onConfirm={handleResolve}
+          onCancel={() => setResolvingCase(null)}
+          loading={resolveLoading}
+        />
+      )}
     </div>
   );
 }

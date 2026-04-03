@@ -4,62 +4,38 @@
 Build a production-ready, multi-tenant AML/KYC SaaS platform for financial institutions.
 
 ## Architecture
-- **Frontend**: React, Tailwind CSS, Shadcn UI, DM Sans font, dark theme (#080c12)
+- **Frontend**: React, Tailwind CSS, Shadcn UI, Recharts, @dnd-kit/core, DM Sans font, dark theme (#080c12)
 - **Backend**: FastAPI, PyOTP (2FA), PyJWT, Motor (MongoDB async)
 - **Database**: MongoDB
 - **Auth**: JWT + 2FA (TOTP), 4 roles (Super Admin, Compliance Officer, Analyst, Read-Only)
-- **DnD**: @dnd-kit/core for Kanban drag-and-drop
 
 ## Completed Features
 
-### Phase 1 — Core Platform (DONE)
-- Multi-tenant auth, RBAC, customer onboarding, risk scoring, case management, audit logs, CDD management
-
-### Phase 2 — KYC/AML Integration (DONE - MOCKED)
-- Signzy KYC, OpenSanctions screening, Public API v1, API Keys, Enhanced Dashboard
-
-### Phase 3 — Code Quality (DONE)
-- Eliminated circular imports, extracted services, split components, env-aware logger
-
-### Phase 4 — Screening Page (DONE)
-- Animated 5-step progress, SVG risk circle, result breakdown, 30 seeded records
-
-### Phase 5 — Customers Pages (DONE)
-- Customers List + Customer Detail with timeline/docs/risk breakdown, 25 seeded demo customers
+### Phase 1-5 — Core Platform + Customers + Screening (DONE)
+- Auth, RBAC, Customer CRUD, Risk Scoring, CDD/EDD, Signzy KYC (MOCKED), OpenSanctions (MOCKED)
+- Screening Hub with animated progress, Customers Hub with detailed profiles, 25+30 seeded records
 
 ### Phase 6 — Cases Kanban Board (DONE)
-- 4-column DnD Kanban, urgency dots, resolution modal, SAR generation, team assignment, 8 seeded cases
+- 4-column DnD Kanban, urgency dots, resolution modal (4 types), SAR generation, team assignment, 8 seeded cases
 
 ### Phase 7 — Audit Logs Redesign (DONE)
-- Stats bar, colored action labels (8 types), expandable rows, CSV export, 5 filters, 100 seeded entries
+- Stats bar, 8 colored action labels, expandable detail rows, CSV export, 5 filters, 100 seeded entries
 
-### Phase 8 — Settings Page (DONE - Feb 2026)
-- **6-Tab Settings Page** at `/settings`:
-  - **General**: Company name, logo upload, timezone (12 options), currency (6 options), Save
-  - **Risk Scoring**: 5 weighted sliders (KYC 0-40, Sanctions 0-40, PEP 0-30, Adverse Media 0-20, Country Risk 0-15) + live Score Preview panel showing Low/Medium/High sample profiles
-  - **Integrations**: 3 provider cards (Signzy, OpenSanctions, Sanction Scanner) with API key input, Test Connection button, status indicators (Connected/Demo/Disconnected), enable/disable toggle
-  - **Notifications**: 4 email alert toggles (High-Risk Screening, Case Escalated, Daily Summary, API Usage Threshold) with animated switches
-  - **Team Members**: Full CRUD table (Name, Email, Role badges, Status badges, Edit/Remove), Invite Member form with role selection
-  - **Compliance Rules**: 3 automation toggles (Auto-create case, Auto-escalate, Block onboarding) + Re-screen interval selector (30/60/90 days)
-- **Backend**: 11 endpoints for settings CRUD, team management, integration testing
-- **Seed Data**: Default settings, 3 demo team members (Priya Sharma, Rahul Verma, Anita Desai)
+### Phase 8 — Settings Page (DONE)
+- 6-tab settings: General, Risk Scoring (5 sliders + preview), Integrations (3 providers), Notifications (4 toggles), Team Members (CRUD + invite), Compliance Rules (3 toggles + re-screen interval)
 
-## Key API Endpoints
+### Phase 9 — Premium Dashboard Enhancement (DONE - Feb 2026)
+- **Count-Up Animations**: All stat card numbers animate from 0 to value using easeOutCubic via requestAnimationFrame
+- **Sparkline Mini-Charts**: 7-day trend lines (recharts LineChart) on each stat card — customers, screenings, risk, cases
+- **Animated Donut Chart**: Risk Distribution replaced with recharts PieChart (inner/outer radius donut) — Low/Medium/High/Unacceptable segments with center total
+- **India Heat Map**: SVG-based visualization with 10 city dots (Delhi, Mumbai, Bangalore, etc.) — dot size/color reflects screening volume, pulsing CSS animation, grid background
+- **Live Activity Feed**: Last 15 events from audit_logs with action-type icons, user names, relative timestamps ("2 min ago")
+- **Integration Status Cards**: Signzy, OpenSanctions, News API — all Demo Mode (yellow badge) with Connect buttons linking to /settings
+- **API Usage Stats**: Total Calls + Active Keys
+- **Backend**: 3 new endpoints — `/dashboard/stats`, `/dashboard/trends` (7-day aggregation), `/dashboard/activity-feed`
 
-### Settings
-- GET /api/settings — All settings
-- PUT /api/settings/general — Update company/timezone/currency
-- PUT /api/settings/risk-scoring — Update risk weights
-- PUT /api/settings/integrations/{provider} — Update integration config
-- POST /api/settings/integrations/{provider}/test — Test connection
-- PUT /api/settings/notifications — Update notification toggles
-- PUT /api/settings/compliance-rules — Update compliance rules
-- GET /api/settings/team — List team members
-- POST /api/settings/team/invite — Invite new member
-- PUT /api/settings/team/{id}/role — Update member role
-- DELETE /api/settings/team/{id} — Remove member
-
-### Cases, Audit Logs, Customers, Screening, API Keys, Dashboard (existing)
+## Key Collections
+- users, customers, screening_records, cases, case_notes, audit_logs, settings, api_keys, kyc_verifications, customer_timeline, customer_notes
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports

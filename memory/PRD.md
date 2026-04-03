@@ -6,8 +6,8 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 ## Architecture
 - **Frontend**: React, Tailwind CSS, Shadcn UI, DM Sans font, dark theme (#080c12)
 - **Backend**: FastAPI, PyOTP (2FA), PyJWT, Motor (MongoDB async)
-- **Database**: MongoDB (customers, screening_records, customer_timeline, customer_notes, cases, case_notes, case_comments, audit_logs, users, tenants, api_keys, kyc_verifications)
-- **Auth**: JWT + 2FA (TOTP), 4 roles
+- **Database**: MongoDB
+- **Auth**: JWT + 2FA (TOTP), 4 roles (Super Admin, Compliance Officer, Analyst, Read-Only)
 - **DnD**: @dnd-kit/core for Kanban drag-and-drop
 
 ## Completed Features
@@ -15,48 +15,50 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 ### Phase 1 — Core Platform (DONE)
 - Multi-tenant auth, RBAC, customer onboarding, risk scoring, case management, audit logs, CDD management
 
-### Phase 2 — KYC/AML Integration (DONE - Mock Mode)
+### Phase 2 — KYC/AML Integration (DONE - MOCKED)
 - Signzy KYC (PAN/Aadhaar/Passport/Voter ID/DL), OpenSanctions screening, Public API v1, API Keys, Enhanced Dashboard
 
 ### Phase 3 — Code Quality (DONE)
 - Eliminated circular imports, extracted services, split components, env-aware logger
 
 ### Phase 4 — Screening Page (DONE)
-- New Screening modal with animated 5-step progress, SVG risk circle, result card with breakdown, 30 seeded records, history table with filters/pagination
+- New Screening modal with animated 5-step progress, SVG risk circle, result card with breakdown, 30 seeded records
 
 ### Phase 5 — Customers Pages (DONE)
-- **Customers List**: Table with Name, ID Type, KYC Status, Risk Level, Last Screened, CDD Tier, View button. Search + Filters. Pagination.
-- **Customer Detail**: Header, Activity Timeline, Documents, Screening History, Risk Score Breakdown, Internal Notes.
-- **25 Seeded Demo Customers**: Realistic Indian names, 3 PEP matches, mixed risk levels.
+- Customers List with search + filters, Customer Detail with timeline/docs/risk breakdown, 25 seeded demo customers
 
 ### Phase 6 — Cases Kanban Board (DONE - Feb 2026)
-- **Kanban Board** (`/cases`): 4-column drag-and-drop board using @dnd-kit/core
-  - New Alerts (open), Under Investigation (in_progress), Escalated (escalated), Resolved (closed)
-- **Stats Bar**: Total Cases, Open Alerts, Escalated, SAR Filed counts
-- **Case Cards**: Case ID, customer name, case type icon (PEP/Sanctions/Adverse Media/Suspicious Txn), priority badges, SAR badge, assigned user
-- **Urgency Indicators**: Red dot (>7 days), Yellow (3-7 days), Green (<3 days)
-- **Case Detail Slide-Out Panel**: Description, risk score/level, created/due dates, assignment dropdown (3 demo team members), Generate SAR Report button, activity log with comments
-- **Resolution Modal**: When dragging to Resolved, prompts for resolution type (True Match SAR Filed, True Match Risk Accepted, False Positive, Duplicate) — logged in audit trail
-- **SAR Report Generation**: Mock SAR with pre-filled customer data, screening results, risk score, narrative
-- **8 Seeded Demo Cases**: Linked to existing customers, mixed statuses/priorities/ages
-- **3 Demo Team Members**: Priya Sharma (Compliance Officer), Rahul Verma (Senior Analyst), Anita Desai (MLRO)
+- 4-column Kanban board with @dnd-kit drag-and-drop (New Alerts, Under Investigation, Escalated, Resolved)
+- Stats bar, urgency dots (red/yellow/green), resolution modal (4 types), SAR report generation
+- Assignment dropdown (3 demo team members), activity log with comments, 8 seeded demo cases
 
-## API Endpoints (Cases)
-- GET /api/cases — List all cases
-- GET /api/cases/stats — Stats by status, SAR count
-- GET /api/cases/{id} — Case detail with comments
-- PATCH /api/cases/{id}/status — Quick status update (Kanban DnD)
-- POST /api/cases/{id}/resolve — Resolve with resolution type
-- PUT /api/cases/{id}/assign — Assign to team member
-- POST /api/cases/{id}/generate-sar — Generate mock SAR report
-- GET /api/cases/{id}/notes — Activity log
-- POST /api/cases/{id}/notes — Add comment
-- GET /api/team-members — Demo team members
+### Phase 7 — Audit Logs Redesign (DONE - Feb 2026)
+- **Stats bar**: Events Today, Active Users, Screenings Today, Cases Resolved
+- **Colored action labels**: Screening Run (blue), Case Created (yellow), Case Resolved (green), API Key Generated (purple), Customer Added (teal), Settings Changed (gray), Login (gray), SAR Filed (red)
+- **Expandable rows**: Click any row to see full details JSON (key-value pairs)
+- **Export CSV**: Downloads filtered audit log as CSV file
+- **Filters**: Action Type, User, Module, Date Range + Clear All
+- **Pagination**: 50 per page
+- **100 seeded demo audit log entries** spanning 30 days with varied action types, users, IPs
+
+## Key API Endpoints
+### Cases
+- GET /api/cases, GET /api/cases/stats, GET /api/cases/{id}
+- PATCH /api/cases/{id}/status, POST /api/cases/{id}/resolve
+- PUT /api/cases/{id}/assign, POST /api/cases/{id}/generate-sar
+- GET /api/cases/{id}/notes, POST /api/cases/{id}/notes
+- GET /api/team-members
+
+### Audit Logs
+- GET /api/audit-logs, GET /api/audit-logs/stats, GET /api/audit-logs/filters
+- GET /api/audit-logs/export/csv, GET /api/audit-logs/export/pdf
+
+### Auth, Customers, Screening, API Keys, Dashboard (existing)
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports
 - P1: Admin Settings & Stripe Billing (`/settings/billing`)
-- P2: Webhooks notification system (retry logic, HMAC-SHA256 signatures)
+- P2: Webhooks notification system (retry logic, HMAC-SHA256)
 - P2: In-App Notifications Bell + SendGrid emails
 - P2: Public self-service onboarding portal (`/onboarding/:token`)
 

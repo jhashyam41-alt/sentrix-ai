@@ -16,48 +16,54 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 - Multi-tenant auth, RBAC, customer onboarding, risk scoring, case management, audit logs, CDD management
 
 ### Phase 2 — KYC/AML Integration (DONE - MOCKED)
-- Signzy KYC (PAN/Aadhaar/Passport/Voter ID/DL), OpenSanctions screening, Public API v1, API Keys, Enhanced Dashboard
+- Signzy KYC, OpenSanctions screening, Public API v1, API Keys, Enhanced Dashboard
 
 ### Phase 3 — Code Quality (DONE)
 - Eliminated circular imports, extracted services, split components, env-aware logger
 
 ### Phase 4 — Screening Page (DONE)
-- New Screening modal with animated 5-step progress, SVG risk circle, result card with breakdown, 30 seeded records
+- Animated 5-step progress, SVG risk circle, result breakdown, 30 seeded records
 
 ### Phase 5 — Customers Pages (DONE)
-- Customers List with search + filters, Customer Detail with timeline/docs/risk breakdown, 25 seeded demo customers
+- Customers List + Customer Detail with timeline/docs/risk breakdown, 25 seeded demo customers
 
-### Phase 6 — Cases Kanban Board (DONE - Feb 2026)
-- 4-column Kanban board with @dnd-kit drag-and-drop (New Alerts, Under Investigation, Escalated, Resolved)
-- Stats bar, urgency dots (red/yellow/green), resolution modal (4 types), SAR report generation
-- Assignment dropdown (3 demo team members), activity log with comments, 8 seeded demo cases
+### Phase 6 — Cases Kanban Board (DONE)
+- 4-column DnD Kanban, urgency dots, resolution modal, SAR generation, team assignment, 8 seeded cases
 
-### Phase 7 — Audit Logs Redesign (DONE - Feb 2026)
-- **Stats bar**: Events Today, Active Users, Screenings Today, Cases Resolved
-- **Colored action labels**: Screening Run (blue), Case Created (yellow), Case Resolved (green), API Key Generated (purple), Customer Added (teal), Settings Changed (gray), Login (gray), SAR Filed (red)
-- **Expandable rows**: Click any row to see full details JSON (key-value pairs)
-- **Export CSV**: Downloads filtered audit log as CSV file
-- **Filters**: Action Type, User, Module, Date Range + Clear All
-- **Pagination**: 50 per page
-- **100 seeded demo audit log entries** spanning 30 days with varied action types, users, IPs
+### Phase 7 — Audit Logs Redesign (DONE)
+- Stats bar, colored action labels (8 types), expandable rows, CSV export, 5 filters, 100 seeded entries
+
+### Phase 8 — Settings Page (DONE - Feb 2026)
+- **6-Tab Settings Page** at `/settings`:
+  - **General**: Company name, logo upload, timezone (12 options), currency (6 options), Save
+  - **Risk Scoring**: 5 weighted sliders (KYC 0-40, Sanctions 0-40, PEP 0-30, Adverse Media 0-20, Country Risk 0-15) + live Score Preview panel showing Low/Medium/High sample profiles
+  - **Integrations**: 3 provider cards (Signzy, OpenSanctions, Sanction Scanner) with API key input, Test Connection button, status indicators (Connected/Demo/Disconnected), enable/disable toggle
+  - **Notifications**: 4 email alert toggles (High-Risk Screening, Case Escalated, Daily Summary, API Usage Threshold) with animated switches
+  - **Team Members**: Full CRUD table (Name, Email, Role badges, Status badges, Edit/Remove), Invite Member form with role selection
+  - **Compliance Rules**: 3 automation toggles (Auto-create case, Auto-escalate, Block onboarding) + Re-screen interval selector (30/60/90 days)
+- **Backend**: 11 endpoints for settings CRUD, team management, integration testing
+- **Seed Data**: Default settings, 3 demo team members (Priya Sharma, Rahul Verma, Anita Desai)
 
 ## Key API Endpoints
-### Cases
-- GET /api/cases, GET /api/cases/stats, GET /api/cases/{id}
-- PATCH /api/cases/{id}/status, POST /api/cases/{id}/resolve
-- PUT /api/cases/{id}/assign, POST /api/cases/{id}/generate-sar
-- GET /api/cases/{id}/notes, POST /api/cases/{id}/notes
-- GET /api/team-members
 
-### Audit Logs
-- GET /api/audit-logs, GET /api/audit-logs/stats, GET /api/audit-logs/filters
-- GET /api/audit-logs/export/csv, GET /api/audit-logs/export/pdf
+### Settings
+- GET /api/settings — All settings
+- PUT /api/settings/general — Update company/timezone/currency
+- PUT /api/settings/risk-scoring — Update risk weights
+- PUT /api/settings/integrations/{provider} — Update integration config
+- POST /api/settings/integrations/{provider}/test — Test connection
+- PUT /api/settings/notifications — Update notification toggles
+- PUT /api/settings/compliance-rules — Update compliance rules
+- GET /api/settings/team — List team members
+- POST /api/settings/team/invite — Invite new member
+- PUT /api/settings/team/{id}/role — Update member role
+- DELETE /api/settings/team/{id} — Remove member
 
-### Auth, Customers, Screening, API Keys, Dashboard (existing)
+### Cases, Audit Logs, Customers, Screening, API Keys, Dashboard (existing)
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports
-- P1: Admin Settings & Stripe Billing (`/settings/billing`)
+- P2: Stripe Billing integration (`/settings/billing`)
 - P2: Webhooks notification system (retry logic, HMAC-SHA256)
 - P2: In-App Notifications Bell + SendGrid emails
 - P2: Public self-service onboarding portal (`/onboarding/:token`)

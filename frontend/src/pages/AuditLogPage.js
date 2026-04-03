@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import logger from "../utils/logger";
-import { FileText, Download } from "lucide-react";
+import { Download, Activity, Users, Search as SearchIcon, ShieldCheck } from "lucide-react";
 import { AuditLogFilters } from "../components/audit/AuditLogFilters";
 import { AuditLogTable } from "../components/audit/AuditLogTable";
 
@@ -11,13 +11,14 @@ const PAGE_SIZE = 50;
 export default function AuditLogPage() {
   const [logs, setLogs] = useState([]);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState({
     action_type: "", user_name: "", module: "", start_date: "", end_date: ""
   });
   const [filterOptions, setFilterOptions] = useState({ action_types: [], modules: [], users: [] });
-  const [exporting, setExporting] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -25,6 +26,15 @@ export default function AuditLogPage() {
       setFilterOptions(data);
     } catch (err) {
       logger.error("Failed to fetch filter options:", err);
+    }
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/audit-logs/stats`, { withCredentials: true });
+      setStats(data);
+    } catch (err) {
+      logger.error("Failed to fetch audit stats:", err);
     }
   }, []);
 
@@ -50,7 +60,7 @@ export default function AuditLogPage() {
     }
   }, [page, filters]);
 
-  useEffect(() => { fetchFilters(); }, [fetchFilters]);
+  useEffect(() => { fetchFilters(); fetchStats(); }, [fetchFilters, fetchStats]);
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const handleFilterChange = (key, value) => {
@@ -63,8 +73,8 @@ export default function AuditLogPage() {
     setPage(0);
   };
 
-  const exportFile = async (format) => {
-    setExporting(format);
+  const exportCsv = async () => {
+    setExporting(true);
     try {
       const params = new URLSearchParams();
       if (filters.action_type) params.append("action_type", filters.action_type);
@@ -73,26 +83,33 @@ export default function AuditLogPage() {
       if (filters.start_date) params.append("start_date", filters.start_date);
       if (filters.end_date) params.append("end_date", filters.end_date);
 
-      const response = await axios.get(`${API}/audit-logs/export/${format}?${params}`, {
+      const response = await axios.get(`${API}/audit-logs/export/csv?${params}`, {
         withCredentials: true, responseType: "blob"
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `audit_log.${format}`);
+      link.setAttribute("download", `audit_log.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      logger.error(`Export ${format} failed:`, err);
+      logger.error("Export CSV failed:", err);
     } finally {
-      setExporting(null);
+      setExporting(false);
     }
   };
 
   const hasActiveFilters = Object.values(filters).some(v => v !== "");
+
+  const statCards = [
+    { label: "Events Today", value: stats.total_today || 0, icon: Activity, color: "#2563eb" },
+    { label: "Active Users", value: stats.unique_users || 0, icon: Users, color: "#10b981" },
+    { label: "Screenings Today", value: stats.screenings_today || 0, icon: SearchIcon, color: "#f59e0b" },
+    { label: "Cases Resolved", value: stats.cases_resolved_today || 0, icon: ShieldCheck, color: "#a855f7" },
+  ];
 
   return (
     <div>
@@ -106,29 +123,50 @@ export default function AuditLogPage() {
             Immutable record of all system activity &mdash; {total.toLocaleString()} entries
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => exportFile("csv")} disabled={exporting === "csv"} data-testid="export-csv-btn"
-            style={{
-              background: "#0d1117", border: "1px solid #1e2530", borderRadius: "8px", padding: "8px 14px",
-              color: "#94a3b8", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-              display: "flex", alignItems: "center", gap: "6px", transition: "all 0.15s"
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2563eb"; e.currentTarget.style.color = "#f1f5f9"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e2530"; e.currentTarget.style.color = "#94a3b8"; }}>
-            <Download className="w-4 h-4" />
-            {exporting === "csv" ? "Exporting..." : "CSV"}
-          </button>
-          <button onClick={() => exportFile("pdf")} disabled={exporting === "pdf"} data-testid="export-pdf-btn"
-            style={{
-              background: "linear-gradient(135deg, #2563eb, #1d4ed8)", borderRadius: "8px", padding: "8px 14px",
-              color: "#ffffff", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-              display: "flex", alignItems: "center", gap: "6px", border: "none",
-              boxShadow: "0 2px 8px rgba(37, 99, 235, 0.25)"
-            }}>
-            <FileText className="w-4 h-4" />
-            {exporting === "pdf" ? "Exporting..." : "PDF"}
-          </button>
-        </div>
+        <button
+          onClick={exportCsv}
+          disabled={exporting}
+          data-testid="export-csv-btn"
+          style={{
+            background: "#0d1117", border: "1px solid #1e2530", borderRadius: "8px", padding: "8px 16px",
+            color: "#94a3b8", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "6px", transition: "all 0.15s"
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2563eb"; e.currentTarget.style.color = "#f1f5f9"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e2530"; e.currentTarget.style.color = "#94a3b8"; }}
+        >
+          <Download className="w-4 h-4" />
+          {exporting ? "Exporting..." : "Export CSV"}
+        </button>
+      </div>
+
+      {/* Stats Bar */}
+      <div data-testid="audit-stats-bar" style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
+        {statCards.map((s) => {
+          const Icon = s.icon;
+          return (
+            <div
+              key={s.label}
+              data-testid={`audit-stat-${s.label.toLowerCase().replace(/ /g, "-")}`}
+              style={{
+                flex: 1, background: "#0d1117", border: "1px solid #1e2530",
+                borderRadius: "10px", padding: "16px 20px",
+                display: "flex", alignItems: "center", gap: "14px",
+              }}
+            >
+              <div style={{
+                width: "40px", height: "40px", borderRadius: "10px",
+                background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon style={{ width: "18px", height: "18px", color: s.color }} />
+              </div>
+              <div>
+                <div style={{ fontSize: "22px", fontWeight: "700", color: "#f1f5f9" }}>{s.value}</div>
+                <div style={{ fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>{s.label}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <AuditLogFilters

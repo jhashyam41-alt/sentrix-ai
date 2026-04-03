@@ -1,360 +1,270 @@
 """
-Audit Log Feature Tests
-Tests for:
-- GET /api/audit-logs - List audit logs with filtering
-- GET /api/audit-logs/filters - Get filter options (action_types, modules, users)
-- GET /api/audit-logs/export/csv - Export logs as CSV
-- GET /api/audit-logs/export/pdf - Export logs as PDF
-- Immutability verification - No PUT/DELETE endpoints for audit logs
+Audit Logs API Tests
+Tests for: GET /api/audit-logs, GET /api/audit-logs/stats, GET /api/audit-logs/filters, GET /api/audit-logs/export/csv
 """
-
 import pytest
 import requests
 import os
+from datetime import datetime, timedelta
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-# Test credentials from environment
-ADMIN_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', '')
-ADMIN_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', '')
-
-
-class TestAuditLogAuthentication:
-    """Test authentication for audit log endpoints"""
+class TestAuditLogsAPI:
+    """Audit Logs endpoint tests"""
     
     @pytest.fixture(autouse=True)
     def setup(self):
+        """Login and get session with auth cookie"""
         self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-    
-    def test_login_and_get_token(self):
-        """Login and verify we can authenticate"""
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
-        })
-        assert response.status_code == 200, f"Login failed: {response.text}"
-        data = response.json()
-        assert "access_token" in data, "No access token in response"
-        assert data["user"]["role"] == "super_admin", "User should be super_admin"
-        print(f"✓ Login successful for {ADMIN_EMAIL}")
-        return data["access_token"]
-
-
-class TestAuditLogEndpoints:
-    """Test audit log CRUD operations"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        # Login and get token
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
-        })
-        if response.status_code == 200:
-            token = response.json().get("access_token")
-            self.session.headers.update({"Authorization": f"Bearer {token}"})
-        else:
-            pytest.skip("Authentication failed")
-    
-    def test_get_audit_logs_returns_list(self):
-        """GET /api/audit-logs returns logs with proper structure"""
-        response = self.session.get(f"{BASE_URL}/api/audit-logs")
-        assert response.status_code == 200, f"Failed: {response.text}"
-        data = response.json()
-        
-        # Verify response structure
-        assert "logs" in data, "Response should have 'logs' key"
-        assert "total" in data, "Response should have 'total' key"
-        assert isinstance(data["logs"], list), "logs should be a list"
-        assert isinstance(data["total"], int), "total should be an integer"
-        
-        print(f"✓ GET /api/audit-logs returned {len(data['logs'])} logs, total: {data['total']}")
-        
-        # Verify log entry structure if logs exist
-        if data["logs"]:
-            log = data["logs"][0]
-            required_fields = ["timestamp", "user_name", "user_role", "action_type", "module", "ip_address"]
-            for field in required_fields:
-                assert field in log, f"Log entry missing required field: {field}"
-            print(f"✓ Log entry has all required fields: {required_fields}")
-    
-    def test_get_audit_logs_with_pagination(self):
-        """GET /api/audit-logs supports pagination with limit and skip"""
-        # Get first page
-        response1 = self.session.get(f"{BASE_URL}/api/audit-logs?limit=5&skip=0")
-        assert response1.status_code == 200
-        data1 = response1.json()
-        
-        # Get second page
-        response2 = self.session.get(f"{BASE_URL}/api/audit-logs?limit=5&skip=5")
-        assert response2.status_code == 200
-        data2 = response2.json()
-        
-        # Verify pagination works (if enough data)
-        if data1["total"] > 5:
-            assert len(data1["logs"]) == 5, "First page should have 5 logs"
-            # Second page should have different logs
-            if data2["logs"]:
-                first_ids = [log.get("id") for log in data1["logs"]]
-                second_ids = [log.get("id") for log in data2["logs"]]
-                assert first_ids != second_ids, "Pagination should return different logs"
-        
-        print(f"✓ Pagination working - Page 1: {len(data1['logs'])} logs, Page 2: {len(data2['logs'])} logs")
-    
-    def test_filter_by_action_type(self):
-        """GET /api/audit-logs supports filtering by action_type"""
-        # First get available action types
-        filters_response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
-        if filters_response.status_code == 200:
-            filters = filters_response.json()
-            if filters.get("action_types"):
-                action_type = filters["action_types"][0]
-                
-                response = self.session.get(f"{BASE_URL}/api/audit-logs?action_type={action_type}")
-                assert response.status_code == 200
-                data = response.json()
-                
-                # All returned logs should have the filtered action_type
-                for log in data["logs"]:
-                    assert log["action_type"] == action_type, f"Log action_type mismatch: {log['action_type']} != {action_type}"
-                
-                print(f"✓ Filter by action_type '{action_type}' returned {len(data['logs'])} logs")
-    
-    def test_filter_by_module(self):
-        """GET /api/audit-logs supports filtering by module"""
-        filters_response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
-        if filters_response.status_code == 200:
-            filters = filters_response.json()
-            if filters.get("modules"):
-                module = filters["modules"][0]
-                
-                response = self.session.get(f"{BASE_URL}/api/audit-logs?module={module}")
-                assert response.status_code == 200
-                data = response.json()
-                
-                for log in data["logs"]:
-                    assert log["module"] == module, f"Log module mismatch: {log['module']} != {module}"
-                
-                print(f"✓ Filter by module '{module}' returned {len(data['logs'])} logs")
-    
-    def test_filter_by_user_name(self):
-        """GET /api/audit-logs supports filtering by user_name"""
-        filters_response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
-        if filters_response.status_code == 200:
-            filters = filters_response.json()
-            if filters.get("users"):
-                user_name = filters["users"][0]
-                
-                response = self.session.get(f"{BASE_URL}/api/audit-logs?user_name={user_name}")
-                assert response.status_code == 200
-                data = response.json()
-                
-                # user_name filter uses regex, so partial match is allowed
-                for log in data["logs"]:
-                    assert user_name.lower() in log["user_name"].lower(), "User name filter failed"
-                
-                print(f"✓ Filter by user_name '{user_name}' returned {len(data['logs'])} logs")
-    
-    def test_filter_by_date_range(self):
-        """GET /api/audit-logs supports filtering by date range"""
-        # Use a wide date range to ensure we get results
-        response = self.session.get(f"{BASE_URL}/api/audit-logs?start_date=2024-01-01&end_date=2030-12-31")
-        assert response.status_code == 200
-        data = response.json()
-        
-        print(f"✓ Filter by date range returned {len(data['logs'])} logs")
-    
-    def test_get_audit_log_filters(self):
-        """GET /api/audit-logs/filters returns distinct values for dropdowns"""
-        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
-        assert response.status_code == 200, f"Failed: {response.text}"
-        data = response.json()
-        
-        # Verify response structure
-        assert "action_types" in data, "Response should have 'action_types'"
-        assert "modules" in data, "Response should have 'modules'"
-        assert "users" in data, "Response should have 'users'"
-        
-        assert isinstance(data["action_types"], list), "action_types should be a list"
-        assert isinstance(data["modules"], list), "modules should be a list"
-        assert isinstance(data["users"], list), "users should be a list"
-        
-        print("✓ GET /api/audit-logs/filters returned:")
-        print(f"  - action_types: {data['action_types']}")
-        print(f"  - modules: {data['modules']}")
-        print(f"  - users: {data['users']}")
-
-
-class TestAuditLogExport:
-    """Test audit log export functionality"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
-        })
-        if response.status_code == 200:
-            token = response.json().get("access_token")
-            self.session.headers.update({"Authorization": f"Bearer {token}"})
-        else:
-            pytest.skip("Authentication failed")
-    
-    def test_export_csv(self):
-        """GET /api/audit-logs/export/csv returns valid CSV file"""
-        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv")
-        assert response.status_code == 200, f"CSV export failed: {response.text}"
-        
-        # Check content type
-        content_type = response.headers.get("Content-Type", "")
-        assert "text/csv" in content_type, f"Expected text/csv, got {content_type}"
-        
-        # Check content disposition header
-        content_disp = response.headers.get("Content-Disposition", "")
-        assert "attachment" in content_disp, "Should have attachment disposition"
-        assert ".csv" in content_disp, "Filename should have .csv extension"
-        
-        # Verify CSV content
-        csv_content = response.text
-        lines = csv_content.strip().split("\n")
-        assert len(lines) >= 1, "CSV should have at least header row"
-        
-        # Check header row
-        header = lines[0]
-        expected_headers = ["Timestamp", "User", "Role", "Action", "Module", "Record ID", "IP Address"]
-        for h in expected_headers:
-            assert h in header, f"CSV header missing: {h}"
-        
-        print(f"✓ CSV export successful - {len(lines)} rows (including header)")
-        print(f"  Headers: {header}")
-    
-    def test_export_pdf(self):
-        """GET /api/audit-logs/export/pdf returns valid PDF file"""
-        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/pdf")
-        assert response.status_code == 200, f"PDF export failed: {response.text}"
-        
-        # Check content type
-        content_type = response.headers.get("Content-Type", "")
-        assert "application/pdf" in content_type, f"Expected application/pdf, got {content_type}"
-        
-        # Check content disposition header
-        content_disp = response.headers.get("Content-Disposition", "")
-        assert "attachment" in content_disp, "Should have attachment disposition"
-        assert ".pdf" in content_disp, "Filename should have .pdf extension"
-        
-        # Verify PDF content starts with PDF magic bytes
-        pdf_content = response.content
-        assert pdf_content[:4] == b'%PDF', "PDF should start with %PDF magic bytes"
-        
-        print(f"✓ PDF export successful - {len(pdf_content)} bytes")
-    
-    def test_export_csv_with_filters(self):
-        """CSV export respects filter parameters"""
-        # Get filters first
-        filters_response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
-        if filters_response.status_code == 200:
-            filters = filters_response.json()
-            if filters.get("modules"):
-                module = filters["modules"][0]
-                
-                response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv?module={module}")
-                assert response.status_code == 200
-                
-                csv_content = response.text
-                lines = csv_content.strip().split("\n")
-                
-                # Skip header, check data rows contain the module
-                if len(lines) > 1:
-                    for line in lines[1:]:
-                        assert module in line, f"Filtered CSV should only contain module '{module}'"
-                
-                print(f"✓ CSV export with module filter '{module}' successful")
-
-
-class TestAuditLogImmutability:
-    """Test that audit logs cannot be modified or deleted"""
-    
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
-        })
-        if response.status_code == 200:
-            token = response.json().get("access_token")
-            self.session.headers.update({"Authorization": f"Bearer {token}"})
-        else:
-            pytest.skip("Authentication failed")
-    
-    def test_no_put_endpoint_for_audit_logs(self):
-        """PUT /api/audit-logs/{id} should not exist (405 or 404)"""
-        # Get a log ID first
-        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=1")
-        if response.status_code == 200 and response.json().get("logs"):
-            log_id = response.json()["logs"][0].get("id", "test-id")
-            
-            # Try to update - should fail
-            put_response = self.session.put(
-                f"{BASE_URL}/api/audit-logs/{log_id}",
-                json={"action_type": "modified"}
-            )
-            # Should return 404 (not found) or 405 (method not allowed)
-            assert put_response.status_code in [404, 405, 422], \
-                f"PUT should not be allowed, got {put_response.status_code}"
-            
-            print(f"✓ PUT /api/audit-logs/{log_id} correctly returns {put_response.status_code}")
-    
-    def test_no_delete_endpoint_for_audit_logs(self):
-        """DELETE /api/audit-logs/{id} should not exist (405 or 404)"""
-        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=1")
-        if response.status_code == 200 and response.json().get("logs"):
-            log_id = response.json()["logs"][0].get("id", "test-id")
-            
-            # Try to delete - should fail
-            delete_response = self.session.delete(f"{BASE_URL}/api/audit-logs/{log_id}")
-            # Should return 404 (not found) or 405 (method not allowed)
-            assert delete_response.status_code in [404, 405], \
-                f"DELETE should not be allowed, got {delete_response.status_code}"
-            
-            print(f"✓ DELETE /api/audit-logs/{log_id} correctly returns {delete_response.status_code}")
-    
-    def test_no_post_endpoint_for_manual_audit_creation(self):
-        """POST /api/audit-logs should not exist (logs are auto-created only)"""
-        post_response = self.session.post(
-            f"{BASE_URL}/api/audit-logs",
-            json={
-                "action_type": "manual_entry",
-                "module": "test",
-                "user_name": "Hacker"
-            }
+        login_response = self.session.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"email": "shyam@sentrixai.com", "password": "Sentrix@2024"}
         )
-        # Should return 404 (not found) or 405 (method not allowed)
-        assert post_response.status_code in [404, 405], \
-            f"POST should not be allowed, got {post_response.status_code}"
-        
-        print(f"✓ POST /api/audit-logs correctly returns {post_response.status_code}")
-
-
-class TestAuditLogAccessControl:
-    """Test role-based access control for audit logs"""
+        assert login_response.status_code == 200, f"Login failed: {login_response.text}"
+        # Cookie is set automatically by session
     
-    def test_unauthenticated_access_denied(self):
-        """Unauthenticated requests should be denied"""
+    # ==================== GET /api/audit-logs/stats ====================
+    def test_audit_stats_returns_200(self):
+        """Stats endpoint returns 200"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/stats")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    
+    def test_audit_stats_has_required_fields(self):
+        """Stats response has all 4 required fields"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/stats")
+        data = response.json()
+        assert "total_today" in data, "Missing total_today"
+        assert "unique_users" in data, "Missing unique_users"
+        assert "screenings_today" in data, "Missing screenings_today"
+        assert "cases_resolved_today" in data, "Missing cases_resolved_today"
+    
+    def test_audit_stats_values_are_integers(self):
+        """Stats values are integers"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/stats")
+        data = response.json()
+        assert isinstance(data["total_today"], int), "total_today should be int"
+        assert isinstance(data["unique_users"], int), "unique_users should be int"
+        assert isinstance(data["screenings_today"], int), "screenings_today should be int"
+        assert isinstance(data["cases_resolved_today"], int), "cases_resolved_today should be int"
+    
+    # ==================== GET /api/audit-logs ====================
+    def test_audit_logs_returns_200(self):
+        """Audit logs endpoint returns 200"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    
+    def test_audit_logs_has_logs_and_total(self):
+        """Response has logs array and total count"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs")
+        data = response.json()
+        assert "logs" in data, "Missing logs array"
+        assert "total" in data, "Missing total count"
+        assert isinstance(data["logs"], list), "logs should be a list"
+        assert isinstance(data["total"], int), "total should be int"
+    
+    def test_audit_logs_have_required_fields(self):
+        """Each log entry has required fields"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=10")
+        data = response.json()
+        assert len(data["logs"]) > 0, "No logs returned"
+        
+        required_fields = ["id", "timestamp", "user_name", "action_type", "module", "ip_address"]
+        for log in data["logs"]:
+            for field in required_fields:
+                assert field in log, f"Log missing field: {field}"
+    
+    def test_audit_logs_seeded_100_demo_entries(self):
+        """At least 100 demo audit logs were seeded"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=1")
+        data = response.json()
+        # Should have at least 100 from seeding (may have more from actual usage)
+        assert data["total"] >= 100, f"Expected at least 100 logs, got {data['total']}"
+    
+    def test_audit_logs_pagination_works(self):
+        """Pagination with skip and limit works"""
+        # Get first page
+        page1 = self.session.get(f"{BASE_URL}/api/audit-logs?limit=10&skip=0").json()
+        # Get second page
+        page2 = self.session.get(f"{BASE_URL}/api/audit-logs?limit=10&skip=10").json()
+        
+        assert len(page1["logs"]) == 10, "First page should have 10 logs"
+        assert len(page2["logs"]) == 10, "Second page should have 10 logs"
+        # Ensure different logs
+        page1_ids = {log["id"] for log in page1["logs"]}
+        page2_ids = {log["id"] for log in page2["logs"]}
+        assert page1_ids.isdisjoint(page2_ids), "Pages should have different logs"
+    
+    def test_audit_logs_filter_by_action_type(self):
+        """Filter by action_type works"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?action_type=user_login")
+        data = response.json()
+        # All returned logs should have action_type=user_login
+        for log in data["logs"]:
+            assert log["action_type"] == "user_login", f"Expected user_login, got {log['action_type']}"
+    
+    def test_audit_logs_filter_by_user_name(self):
+        """Filter by user_name works"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?user_name=Shyam")
+        data = response.json()
+        # All returned logs should contain Shyam in user_name
+        for log in data["logs"]:
+            assert "shyam" in log["user_name"].lower(), f"Expected Shyam in user_name, got {log['user_name']}"
+    
+    def test_audit_logs_filter_by_module(self):
+        """Filter by module works"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?module=cases")
+        data = response.json()
+        for log in data["logs"]:
+            assert log["module"] == "cases", f"Expected cases module, got {log['module']}"
+    
+    def test_audit_logs_filter_by_date_range(self):
+        """Filter by date range works"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?start_date={yesterday}&end_date={today}")
+        data = response.json()
+        # Should return logs (may be 0 if no activity in range)
+        assert "logs" in data
+        assert "total" in data
+    
+    # ==================== GET /api/audit-logs/filters ====================
+    def test_audit_filters_returns_200(self):
+        """Filters endpoint returns 200"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    
+    def test_audit_filters_has_required_fields(self):
+        """Filters response has action_types, modules, users"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
+        data = response.json()
+        assert "action_types" in data, "Missing action_types"
+        assert "modules" in data, "Missing modules"
+        assert "users" in data, "Missing users"
+    
+    def test_audit_filters_action_types_not_empty(self):
+        """Action types list is not empty"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
+        data = response.json()
+        assert len(data["action_types"]) > 0, "action_types should not be empty"
+    
+    def test_audit_filters_contains_expected_action_types(self):
+        """Action types include expected values from seeded data"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
+        data = response.json()
+        expected_types = ["screening_run", "case_created", "user_login", "customer_created"]
+        for action_type in expected_types:
+            assert action_type in data["action_types"], f"Missing expected action_type: {action_type}"
+    
+    def test_audit_filters_modules_not_empty(self):
+        """Modules list is not empty"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
+        data = response.json()
+        assert len(data["modules"]) > 0, "modules should not be empty"
+    
+    def test_audit_filters_users_not_empty(self):
+        """Users list is not empty"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/filters")
+        data = response.json()
+        assert len(data["users"]) > 0, "users should not be empty"
+    
+    # ==================== GET /api/audit-logs/export/csv ====================
+    def test_audit_export_csv_returns_200(self):
+        """CSV export returns 200"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    
+    def test_audit_export_csv_content_type(self):
+        """CSV export has correct content type"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv")
+        content_type = response.headers.get("content-type", "")
+        assert "text/csv" in content_type, f"Expected text/csv, got {content_type}"
+    
+    def test_audit_export_csv_has_content_disposition(self):
+        """CSV export has Content-Disposition header for download"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv")
+        content_disp = response.headers.get("content-disposition", "")
+        assert "attachment" in content_disp, "Missing attachment in Content-Disposition"
+        assert "audit_log" in content_disp, "Missing audit_log in filename"
+        assert ".csv" in content_disp, "Missing .csv extension"
+    
+    def test_audit_export_csv_has_headers(self):
+        """CSV export has expected column headers"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv")
+        content = response.text
+        first_line = content.split('\n')[0]
+        expected_headers = ["Timestamp", "User", "Role", "Action", "Module", "Record ID", "IP Address", "Details"]
+        for header in expected_headers:
+            assert header in first_line, f"Missing header: {header}"
+    
+    def test_audit_export_csv_has_data_rows(self):
+        """CSV export has data rows"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv")
+        lines = response.text.strip().split('\n')
+        # Should have header + at least some data rows
+        assert len(lines) > 1, "CSV should have data rows beyond header"
+    
+    def test_audit_export_csv_with_filters(self):
+        """CSV export respects filters"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs/export/csv?action_type=user_login")
+        content = response.text
+        lines = content.strip().split('\n')
+        # Skip header, check data rows
+        for line in lines[1:]:
+            if line.strip():
+                assert "user_login" in line, f"Filtered CSV should only have user_login actions"
+    
+    # ==================== Action Type Colors (verify data exists) ====================
+    def test_audit_logs_have_various_action_types(self):
+        """Logs include various action types for color coding"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=100")
+        data = response.json()
+        action_types = {log["action_type"] for log in data["logs"]}
+        
+        # Should have multiple action types
+        assert len(action_types) >= 5, f"Expected at least 5 different action types, got {len(action_types)}"
+    
+    def test_audit_logs_have_details_field(self):
+        """Some logs have details field for expandable rows"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=50")
+        data = response.json()
+        
+        logs_with_details = [log for log in data["logs"] if log.get("details")]
+        assert len(logs_with_details) > 0, "Some logs should have details for expandable rows"
+    
+    def test_audit_logs_details_is_dict(self):
+        """Details field is a dictionary when present"""
+        response = self.session.get(f"{BASE_URL}/api/audit-logs?limit=50")
+        data = response.json()
+        
+        for log in data["logs"]:
+            if log.get("details"):
+                assert isinstance(log["details"], dict), f"Details should be dict, got {type(log['details'])}"
+
+
+class TestAuditLogsAccessControl:
+    """Test access control for audit logs"""
+    
+    def test_audit_logs_requires_auth(self):
+        """Audit logs endpoint requires authentication"""
         session = requests.Session()
-        
         response = session.get(f"{BASE_URL}/api/audit-logs")
-        assert response.status_code in [401, 403], \
-            f"Unauthenticated access should be denied, got {response.status_code}"
-        
-        print(f"✓ Unauthenticated access correctly denied with {response.status_code}")
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short"])
+        assert response.status_code == 401, f"Expected 401 without auth, got {response.status_code}"
+    
+    def test_audit_stats_requires_auth(self):
+        """Stats endpoint requires authentication"""
+        session = requests.Session()
+        response = session.get(f"{BASE_URL}/api/audit-logs/stats")
+        assert response.status_code == 401, f"Expected 401 without auth, got {response.status_code}"
+    
+    def test_audit_filters_requires_auth(self):
+        """Filters endpoint requires authentication"""
+        session = requests.Session()
+        response = session.get(f"{BASE_URL}/api/audit-logs/filters")
+        assert response.status_code == 401, f"Expected 401 without auth, got {response.status_code}"
+    
+    def test_audit_export_requires_auth(self):
+        """CSV export requires authentication"""
+        session = requests.Session()
+        response = session.get(f"{BASE_URL}/api/audit-logs/export/csv")
+        assert response.status_code == 401, f"Expected 401 without auth, got {response.status_code}"

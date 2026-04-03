@@ -76,6 +76,8 @@ async def startup_event():
     await seed_demo_customers()
     # Seed demo cases
     await seed_demo_cases()
+    # Seed demo audit logs
+    await seed_demo_audit_logs()
 
 async def create_default_tenant(db):
     """Create default tenant if it doesn't exist"""
@@ -674,6 +676,94 @@ async def seed_demo_cases():
     logger.info("Seeded 8 demo cases with notes")
 
 
+async def seed_demo_audit_logs():
+    """Seed 100 realistic demo audit log entries spanning the last 30 days."""
+    count = await db.audit_logs.count_documents({"tenant_id": "default-tenant", "mode": "demo"})
+    if count >= 100:
+        return
+
+    import random
+
+    await db.audit_logs.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
+
+    users = [
+        {"id": "admin-001", "name": "Shyam - Super Admin", "role": "super_admin"},
+        {"id": "tm-001", "name": "Priya Sharma", "role": "compliance_officer"},
+        {"id": "tm-002", "name": "Rahul Verma", "role": "analyst"},
+        {"id": "tm-003", "name": "Anita Desai", "role": "compliance_officer"},
+    ]
+
+    customer_names = [
+        "Rajendra Prasad Yadav", "Balakrishnan Nair Pillai", "Smt. Laxmi Devi Sharma",
+        "Kabir Singhania", "Manish Tiwari", "Siddharth Malhotra", "Rohit Choudhary",
+        "Harish Pandey", "Arun Kumar Singh", "Neha Banerjee", "Vikash Mehta",
+        "Pradeep Rawat", "Geeta Bala Subramaniam", "Farid Khan"
+    ]
+
+    ips = ["10.0.1.15", "10.0.1.22", "10.0.2.8", "10.0.1.45", "10.0.3.12", "10.0.1.99"]
+
+    action_templates = [
+        {"action_type": "screening_run", "module": "screening", "weight": 18,
+         "details_fn": lambda cn: {"customer_name": cn, "screening_type": random.choice(["sanctions", "pep", "adverse_media"]), "result": random.choice(["clear", "potential_match", "match"]), "score": random.randint(5, 95)}},
+        {"action_type": "case_created", "module": "cases", "weight": 10,
+         "details_fn": lambda cn: {"customer_name": cn, "case_type": random.choice(["pep_match", "sanctions_match", "adverse_media", "suspicious_transaction"]), "priority": random.choice(["critical", "high", "medium"])}},
+        {"action_type": "case_resolved", "module": "cases", "weight": 6,
+         "details_fn": lambda cn: {"customer_name": cn, "resolution_type": random.choice(["true_match_sar_filed", "false_positive", "true_match_risk_accepted", "duplicate"]), "days_open": random.randint(1, 21)}},
+        {"action_type": "api_key_created", "module": "api_keys", "weight": 4,
+         "details_fn": lambda _: {"client_name": random.choice(["Payment Gateway", "Mobile App", "Partner Portal", "Risk Engine"]), "rate_limit": random.choice([100, 500, 1000])}},
+        {"action_type": "customer_created", "module": "customers", "weight": 14,
+         "details_fn": lambda cn: {"customer_name": cn, "customer_type": random.choice(["individual", "corporate"]), "risk_level": random.choice(["low", "medium", "high"])}},
+        {"action_type": "user_login", "module": "auth", "weight": 20,
+         "details_fn": lambda _: {"method": "password", "success": True, "mfa_used": random.choice([True, False])}},
+        {"action_type": "sar_filed", "module": "cases", "weight": 4,
+         "details_fn": lambda cn: {"customer_name": cn, "sar_reference": f"SAR-2026-{random.randint(1000, 9999)}", "case_type": random.choice(["pep_match", "sanctions_match", "suspicious_transaction"])}},
+        {"action_type": "settings_changed", "module": "settings", "weight": 3,
+         "details_fn": lambda _: {"setting": random.choice(["risk_thresholds", "notification_preferences", "screening_config", "tenant_name"]), "changed_by": "admin"}},
+        {"action_type": "case_status_changed", "module": "cases", "weight": 8,
+         "details_fn": lambda cn: {"customer_name": cn, "old_status": random.choice(["open", "in_progress"]), "new_status": random.choice(["in_progress", "escalated"])}},
+        {"action_type": "quick_screening_run", "module": "screening", "weight": 5,
+         "details_fn": lambda cn: {"customer_name": cn, "checks": random.choice([["sanctions"], ["pep"], ["sanctions", "pep", "adverse_media"]]), "risk_score": random.randint(10, 90)}},
+        {"action_type": "customer_updated", "module": "customers", "weight": 5,
+         "details_fn": lambda cn: {"customer_name": cn, "fields_updated": random.choice([["risk_level"], ["cdd_tier"], ["documents"], ["contact_info"]])}},
+        {"action_type": "case_assigned", "module": "cases", "weight": 3,
+         "details_fn": lambda cn: {"customer_name": cn, "assigned_to": random.choice(["Priya Sharma", "Rahul Verma", "Anita Desai"])}},
+    ]
+
+    weighted_templates = []
+    for t in action_templates:
+        weighted_templates.extend([t] * t["weight"])
+
+    base_time = datetime.now(timezone.utc)
+    entries = []
+
+    for i in range(100):
+        template = random.choice(weighted_templates)
+        user = random.choice(users)
+        cn = random.choice(customer_names)
+        hours_ago = random.uniform(0.5, 30 * 24)
+        ts = base_time - timedelta(hours=hours_ago)
+
+        entry = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": "default-tenant",
+            "timestamp": ts.isoformat(),
+            "user_id": user["id"],
+            "user_name": user["name"],
+            "user_role": user["role"],
+            "ip_address": random.choice(ips),
+            "action_type": template["action_type"],
+            "module": template["module"],
+            "record_id": str(uuid.uuid4()),
+            "details": template["details_fn"](cn),
+            "mode": "demo",
+        }
+        entries.append(entry)
+
+    if entries:
+        await db.audit_logs.insert_many(entries)
+    logger.info("Seeded 100 demo audit log entries")
+
+
 # ===================================
 # HELPER FUNCTIONS
 # ===================================
@@ -1263,6 +1353,28 @@ def _build_audit_query(tenant_id: str, action_type: str = None, user_name: str =
             ts_filter["$lte"] = end_date + "T23:59:59"
         query["timestamp"] = ts_filter
     return query
+
+@api_router.get("/audit-logs/stats")
+async def get_audit_log_stats(request: Request):
+    """Return today's audit log statistics."""
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer", "read_only_auditor"]:
+        raise HTTPException(403, "Access denied")
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    tenant_q = {"tenant_id": user["tenant_id"], "timestamp": {"$gte": today_start}}
+
+    total_today = await db.audit_logs.count_documents(tenant_q)
+    unique_users = await db.audit_logs.distinct("user_name", tenant_q)
+    screenings_today = await db.audit_logs.count_documents({**tenant_q, "action_type": {"$in": ["screening_run", "quick_screening_run", "pep_screening_run", "adverse_media_screening_run"]}})
+    cases_resolved_today = await db.audit_logs.count_documents({**tenant_q, "action_type": "case_resolved"})
+
+    return {
+        "total_today": total_today,
+        "unique_users": len(unique_users),
+        "screenings_today": screenings_today,
+        "cases_resolved_today": cases_resolved_today,
+    }
 
 @api_router.get("/audit-logs")
 async def get_audit_logs(

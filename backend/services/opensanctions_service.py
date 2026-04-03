@@ -186,15 +186,17 @@ async def screen_batch(individuals: list) -> dict:
         result = await screen_individual(name, dob, nationality)
         results.append(result)
 
-    matches_found = sum(1 for r in results if r.get("total_matches", 0) > 0)
-    high_risk = sum(1 for r in results if r.get("risk_level") == "HIGH")
+    high = sum(1 for r in results if r.get("risk_level") == "HIGH")
+    medium = sum(1 for r in results if r.get("risk_level") == "MEDIUM")
+    low = sum(1 for r in results if r.get("risk_level") == "LOW")
 
     return {
         "batch_id": f"batch_{uuid.uuid4().hex[:12]}",
         "summary": {
             "total": len(individuals),
-            "matches_found": matches_found,
-            "high_risk_count": high_risk,
+            "high": high,
+            "medium": medium,
+            "low": low,
         },
         "results": results,
         "screened_at": datetime.now(timezone.utc).isoformat(),

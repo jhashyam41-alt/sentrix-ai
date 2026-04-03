@@ -1,0 +1,157 @@
+{
+  "summary": "Complete testing of Settings page for AMLGuard. 36/36 backend tests passed. All 6 tabs (General, Risk Scoring, Integrations, Notifications, Team Members, Compliance Rules) working correctly with full CRUD operations and save functionality.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: GET /api/settings returns 200",
+    "Backend: Settings has general section with company_name, timezone, currency",
+    "Backend: General settings has default values (AMLGuard Demo, Asia/Kolkata, INR)",
+    "Backend: Settings has risk_scoring section with 5 weight fields",
+    "Backend: Settings has integrations section with 3 providers (signzy, opensanctions, sanction_scanner)",
+    "Backend: Each integration has enabled, api_key, status fields",
+    "Backend: Settings has notifications section with 4 toggles",
+    "Backend: Settings has compliance_rules section with 3 rules + rescreen interval",
+    "Backend: PUT /api/settings/general updates company name",
+    "Backend: PUT /api/settings/general updates timezone",
+    "Backend: PUT /api/settings/general updates currency",
+    "Backend: PUT /api/settings/risk-scoring updates weights",
+    "Backend: Risk weights respect max limits (40/40/30/20/15)",
+    "Backend: PUT /api/settings/integrations/{provider} updates API key",
+    "Backend: Toggle integration enabled/disabled works",
+    "Backend: POST /api/settings/integrations/{provider}/test returns connected when API key exists",
+    "Backend: POST /api/settings/integrations/{provider}/test returns demo when no API key",
+    "Backend: Invalid provider returns 400",
+    "Backend: PUT /api/settings/notifications updates toggles",
+    "Backend: PUT /api/settings/compliance-rules updates rules",
+    "Backend: Rescreen interval can be set to 30/60/90 days",
+    "Backend: GET /api/settings/team returns team members list",
+    "Backend: Team members have id, name, email, role, status fields",
+    "Backend: POST /api/settings/team/invite creates new member with invited status",
+    "Backend: Invite requires name and email",
+    "Backend: Invite validates role (compliance_officer, analyst, read_only_auditor)",
+    "Backend: Cannot invite duplicate email",
+    "Backend: PUT /api/settings/team/{id}/role updates member role",
+    "Backend: DELETE /api/settings/team/{id} removes member",
+    "Backend: Cannot remove yourself",
+    "Backend: Settings endpoint requires authentication",
+    "Backend: Team endpoint requires authentication",
+    "Frontend: Settings page renders with 6 tab buttons",
+    "Frontend: Tab navigation switches between tabs correctly",
+    "Frontend: General tab shows Company Name input pre-filled with 'AMLGuard Demo'",
+    "Frontend: General tab shows Timezone select (Asia/Kolkata)",
+    "Frontend: General tab shows Currency select (INR)",
+    "Frontend: General tab shows Logo upload area",
+    "Frontend: General tab Save Changes button works (shows 'Saved')",
+    "Frontend: Risk Scoring tab shows 5 sliders with correct max values (40/40/30/20/15)",
+    "Frontend: Risk Scoring tab shows Score Preview with Low/Medium/High profiles",
+    "Frontend: Risk Scoring tab shows Total weight indicator (100/145 max)",
+    "Frontend: Risk Scoring tab Save Weights button works",
+    "Frontend: Integrations tab shows 3 provider cards (Signzy, OpenSanctions, Sanction Scanner)",
+    "Frontend: Integration cards show status indicators (Demo Mode)",
+    "Frontend: Integration cards have API key input, Save button, Test Connection button",
+    "Frontend: Integration toggle enables/disables provider",
+    "Frontend: Test Connection button updates status",
+    "Frontend: Notifications tab shows 4 toggle switches",
+    "Frontend: Notifications tab Save Preferences button works",
+    "Frontend: Team Members tab shows table with Name, Email, Role, Status, Actions columns",
+    "Frontend: Team Members tab shows 8 members with role badges (Super Admin, Compliance Officer, Analyst)",
+    "Frontend: Team Members tab shows status badges (Active, Invited)",
+    "Frontend: Team Members tab Edit and Remove action buttons visible",
+    "Frontend: Invite Member button opens form with Name, Email, Role fields",
+    "Frontend: Invite form has Send Invite button",
+    "Frontend: Compliance Rules tab shows 3 toggle rules",
+    "Frontend: Compliance Rules tab shows Re-Screen interval selector (30/60/90 days)",
+    "Frontend: Compliance Rules tab Save Rules button works"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_settings.py",
+    "/app/test_reports/pytest/settings_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_settings.py"
+  ],
+  "success_rate": {
+    "backend": "100% (36/36 tests passed)",
+    "frontend": "100% (all UI flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "shyam@sentrixai.com",
+    "admin_password": "Sentrix@2024",
+    "role": "super_admin"
+  },
+  "seed_data_creation": "Default settings seeded on startup with: General (AMLGuard Demo, Asia/Kolkata, INR), Risk Scoring (25/30/20/15/10 weights), Integrations (3 providers in demo mode), Notifications (high_risk_screening and case_escalated enabled), Compliance Rules (auto_create_case and auto_escalate enabled, 90 day rescreen). Demo team members seeded: Priya Sharma (compliance_officer), Rahul Verma (analyst), Anita Desai (compliance_officer).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Settings page fully tested. All 6 tabs working: General (company name, logo upload, timezone, currency), Risk Scoring (5 sliders with max limits 40/40/30/20/15, score preview panel), Integrations (3 providers - Signzy, OpenSanctions, Sanction Scanner with API key input, test connection, toggle), Notifications (4 email toggles), Team Members (table with CRUD operations, invite form), Compliance Rules (3 toggle rules + rescreen interval 30/60/90 days). Backend endpoints: GET /api/settings, PUT /api/settings/general, PUT /api/settings/risk-scoring, PUT /api/settings/integrations/{provider}, POST /api/settings/integrations/{provider}/test, PUT /api/settings/notifications, PUT /api/settings/compliance-rules, GET /api/settings/team, POST /api/settings/team/invite, PUT /api/settings/team/{id}/role, DELETE /api/settings/team/{id}. All endpoints require authentication. Integration test connection returns demo/connected based on API key presence (MOCKED).",
+  "mocked_apis": {
+    "integration_test_connection": "Returns demo/connected based on API key presence, no actual external API calls",
+    "signzy_service.py": "KYC verification returns mock results",
+    "opensanctions_service.py": "Sanctions/PEP screening returns mock results"
+  },
+  "features_verified": {
+    "general_tab": {
+      "company_name": "Input pre-filled with 'AMLGuard Demo'",
+      "logo_upload": "Dashed border upload area with icon",
+      "timezone": "Select dropdown with 12 timezone options",
+      "currency": "Select dropdown with 6 currency options (INR, USD, EUR, GBP, SGD, AED)",
+      "save_button": "Shows 'Saved' feedback after successful save"
+    },
+    "risk_scoring_tab": {
+      "sliders": {
+        "kyc_failure_weight": "max=40, default=25",
+        "sanctions_match_weight": "max=40, default=30",
+        "pep_match_weight": "max=30, default=20",
+        "adverse_media_weight": "max=20, default=15",
+        "country_risk_weight": "max=15, default=10"
+      },
+      "score_preview": {
+        "low_risk": "Score 3 (green)",
+        "medium_risk": "Score 24 (yellow)",
+        "high_risk": "Score 81 (red)"
+      },
+      "total_weight_indicator": "100/145 max"
+    },
+    "integrations_tab": {
+      "providers": ["Signzy", "OpenSanctions", "Sanction Scanner"],
+      "status_indicators": ["Connected (green)", "Demo Mode (yellow)", "Disconnected (red)"],
+      "api_key_input": "Password type input",
+      "test_connection": "Returns status based on API key presence",
+      "toggle": "Enable/disable integration"
+    },
+    "notifications_tab": {
+      "toggles": ["New High-Risk Screening", "Case Escalated", "Daily Summary Report", "API Usage Threshold Reached"],
+      "default_enabled": ["high_risk_screening", "case_escalated"],
+      "default_disabled": ["daily_summary", "api_usage_threshold"]
+    },
+    "team_members_tab": {
+      "table_columns": ["Name", "Email", "Role", "Status", "Actions"],
+      "role_badges": ["Super Admin (blue)", "Compliance Officer (yellow)", "Analyst (teal)", "Viewer (gray)"],
+      "status_badges": ["Active (green)", "Invited (yellow)"],
+      "actions": ["Edit (pencil icon)", "Remove (trash icon)"],
+      "invite_form": {
+        "fields": ["Full name", "Email address", "Role (dropdown)"],
+        "valid_roles": ["Compliance Officer", "Analyst", "Viewer"]
+      }
+    },
+    "compliance_rules_tab": {
+      "rules": [
+        "Auto-Create Case for High Risk",
+        "Auto-Escalate Unacceptable Risk",
+        "Block Onboarding if KYC Fails"
+      ],
+      "rescreen_interval": ["Every 30 days", "Every 60 days", "Every 90 days"],
+      "default_enabled": ["auto_create_case_high_risk", "auto_escalate_unacceptable_risk"],
+      "default_disabled": ["block_onboarding_kyc_fails"],
+      "default_rescreen": 90
+    }
+  }
+}

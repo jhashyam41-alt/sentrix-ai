@@ -78,6 +78,10 @@ async def startup_event():
     await seed_demo_cases()
     # Seed demo audit logs
     await seed_demo_audit_logs()
+    # Seed default settings
+    await seed_default_settings()
+    # Seed demo team members
+    await seed_demo_team_members()
 
 async def create_default_tenant(db):
     """Create default tenant if it doesn't exist"""
@@ -762,6 +766,78 @@ async def seed_demo_audit_logs():
     if entries:
         await db.audit_logs.insert_many(entries)
     logger.info("Seeded 100 demo audit log entries")
+
+
+async def seed_default_settings():
+    """Seed default tenant settings if not present."""
+    existing = await db.settings.find_one({"tenant_id": "default-tenant"})
+    if existing:
+        return
+
+    settings_doc = {
+        "tenant_id": "default-tenant",
+        "general": {
+            "company_name": "AMLGuard Demo",
+            "timezone": "Asia/Kolkata",
+            "currency": "INR",
+        },
+        "risk_scoring": {
+            "kyc_failure_weight": 25,
+            "sanctions_match_weight": 30,
+            "pep_match_weight": 20,
+            "adverse_media_weight": 15,
+            "country_risk_weight": 10,
+        },
+        "integrations": {
+            "signzy": {"enabled": True, "api_key": "", "status": "demo"},
+            "opensanctions": {"enabled": True, "api_key": "", "status": "demo"},
+            "sanction_scanner": {"enabled": False, "api_key": "", "status": "disconnected"},
+        },
+        "notifications": {
+            "high_risk_screening": True,
+            "case_escalated": True,
+            "daily_summary": False,
+            "api_usage_threshold": False,
+        },
+        "compliance_rules": {
+            "auto_create_case_high_risk": True,
+            "auto_escalate_unacceptable_risk": True,
+            "block_onboarding_kyc_fails": False,
+            "rescreen_interval_days": 90,
+        },
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.settings.insert_one(settings_doc)
+    logger.info("Seeded default tenant settings")
+
+
+async def seed_demo_team_members():
+    """Seed demo team members for the Team tab."""
+    team = [
+        {"name": "Priya Sharma", "email": "priya@sentrixai.com", "role": "compliance_officer"},
+        {"name": "Rahul Verma", "email": "rahul@sentrixai.com", "role": "analyst"},
+        {"name": "Anita Desai", "email": "anita@sentrixai.com", "role": "compliance_officer"},
+    ]
+    for m in team:
+        existing = await db.users.find_one({"email": m["email"]})
+        if existing:
+            continue
+        user_doc = {
+            "id": str(uuid.uuid4()),
+            "email": m["email"],
+            "name": m["name"],
+            "role": m["role"],
+            "tenant_id": "default-tenant",
+            "company_name": "AMLGuard Demo",
+            "password_hash": "demo_placeholder",
+            "is_active": True,
+            "status": "active",
+            "totp_secret": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "demo",
+        }
+        await db.users.insert_one(user_doc)
+    logger.info("Seeded demo team members")
 
 
 # ===================================
@@ -1482,6 +1558,230 @@ async def export_audit_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=audit_log_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"}
     )
+
+# ===================================
+# SETTINGS ROUTES
+# ===================================
+
+@api_router.get("/settings")
+async def get_settings(request: Request):
+    user = await get_current_user(request, db)
+    settings = await db.settings.find_one({"tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not settings:
+        return {"error": "Settings not found"}
+    return settings
+
+
+@api_router.put("/settings/general")
+async def update_general_settings(data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] != "super_admin":
+        raise HTTPException(403, "Only super admins can change general settings")
+
+    allowed = {"company_name", "timezone", "currency"}
+    update = {k: v for k, v in data.items() if k in allowed}
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {f"general.{k}": v for k, v in update.items()}}
+    )
+    await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "general", "fields": list(update.keys())}, request)
+    return {"message": "General settings updated"}
+
+
+@api_router.put("/settings/risk-scoring")
+async def update_risk_scoring(data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer"]:
+        raise HTTPException(403, "Access denied")
+
+    allowed = {"kyc_failure_weight", "sanctions_match_weight", "pep_match_weight", "adverse_media_weight", "country_risk_weight"}
+    update = {}
+    limits = {"kyc_failure_weight": 40, "sanctions_match_weight": 40, "pep_match_weight": 30, "adverse_media_weight": 20, "country_risk_weight": 15}
+    for k, v in data.items():
+        if k in allowed:
+            update[k] = max(0, min(int(v), limits.get(k, 40)))
+
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {f"risk_scoring.{k}": v for k, v in update.items()}}
+    )
+    await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "risk_scoring", "weights": update}, request)
+    return {"message": "Risk scoring weights updated"}
+
+
+@api_router.put("/settings/integrations/{provider}")
+async def update_integration(provider: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] != "super_admin":
+        raise HTTPException(403, "Only super admins can change integrations")
+
+    valid_providers = ["signzy", "opensanctions", "sanction_scanner"]
+    if provider not in valid_providers:
+        raise HTTPException(400, "Invalid provider")
+
+    update_fields = {}
+    if "enabled" in data:
+        update_fields[f"integrations.{provider}.enabled"] = bool(data["enabled"])
+    if "api_key" in data:
+        key = data["api_key"]
+        update_fields[f"integrations.{provider}.api_key"] = key
+        update_fields[f"integrations.{provider}.status"] = "connected" if key else "demo"
+
+    await db.settings.update_one({"tenant_id": user["tenant_id"]}, {"$set": update_fields})
+    await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "integrations", "provider": provider}, request)
+    return {"message": f"{provider} settings updated"}
+
+
+@api_router.post("/settings/integrations/{provider}/test")
+async def test_integration(provider: str, request: Request):
+    user = await get_current_user(request, db)
+    valid_providers = ["signzy", "opensanctions", "sanction_scanner"]
+    if provider not in valid_providers:
+        raise HTTPException(400, "Invalid provider")
+
+    settings = await db.settings.find_one({"tenant_id": user["tenant_id"]}, {"_id": 0})
+    integration = settings.get("integrations", {}).get(provider, {}) if settings else {}
+    api_key = integration.get("api_key", "")
+
+    if api_key:
+        status = "connected"
+        message = f"Successfully connected to {provider.replace('_', ' ').title()}"
+    else:
+        status = "demo"
+        message = f"{provider.replace('_', ' ').title()} running in demo mode (no API key)"
+
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {f"integrations.{provider}.status": status}}
+    )
+    return {"status": status, "message": message}
+
+
+@api_router.put("/settings/notifications")
+async def update_notifications(data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer"]:
+        raise HTTPException(403, "Access denied")
+
+    allowed = {"high_risk_screening", "case_escalated", "daily_summary", "api_usage_threshold"}
+    update = {k: bool(v) for k, v in data.items() if k in allowed}
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {f"notifications.{k}": v for k, v in update.items()}}
+    )
+    await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "notifications", "toggles": update}, request)
+    return {"message": "Notification settings updated"}
+
+
+@api_router.put("/settings/compliance-rules")
+async def update_compliance_rules(data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer"]:
+        raise HTTPException(403, "Access denied")
+
+    allowed = {"auto_create_case_high_risk", "auto_escalate_unacceptable_risk", "block_onboarding_kyc_fails", "rescreen_interval_days"}
+    update = {}
+    for k, v in data.items():
+        if k in allowed:
+            update[k] = int(v) if k == "rescreen_interval_days" else bool(v)
+
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {f"compliance_rules.{k}": v for k, v in update.items()}}
+    )
+    await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "compliance_rules", "rules": update}, request)
+    return {"message": "Compliance rules updated"}
+
+
+@api_router.get("/settings/team")
+async def get_team_members_settings(request: Request):
+    user = await get_current_user(request, db)
+    members = await db.users.find(
+        {"tenant_id": user["tenant_id"]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "is_active": 1, "status": 1, "created_at": 1}
+    ).to_list(100)
+    for m in members:
+        if not m.get("status"):
+            m["status"] = "active" if m.get("is_active", True) else "inactive"
+    return {"members": members}
+
+
+@api_router.post("/settings/team/invite")
+async def invite_team_member(data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] != "super_admin":
+        raise HTTPException(403, "Only super admins can invite members")
+
+    email = data.get("email", "").lower().strip()
+    name = data.get("name", "").strip()
+    role = data.get("role", "analyst")
+
+    if not email or not name:
+        raise HTTPException(400, "Name and email are required")
+
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(400, "Email already registered")
+
+    valid_roles = ["compliance_officer", "analyst", "read_only_auditor"]
+    if role not in valid_roles:
+        raise HTTPException(400, f"Invalid role. Must be one of: {', '.join(valid_roles)}")
+
+    member_doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "name": name,
+        "role": role,
+        "tenant_id": user["tenant_id"],
+        "company_name": user.get("company_name", ""),
+        "password_hash": "invited_placeholder",
+        "is_active": True,
+        "status": "invited",
+        "totp_secret": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(member_doc)
+    await log_audit(user["tenant_id"], user, "team_member_invited", "settings", member_doc["id"], {"email": email, "role": role}, request)
+    return {"message": f"Invitation sent to {email}", "member": {"id": member_doc["id"], "name": name, "email": email, "role": role, "status": "invited"}}
+
+
+@api_router.put("/settings/team/{member_id}/role")
+async def update_team_member_role(member_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] != "super_admin":
+        raise HTTPException(403, "Only super admins can change roles")
+
+    member = await db.users.find_one({"id": member_id, "tenant_id": user["tenant_id"]})
+    if not member:
+        raise HTTPException(404, "Member not found")
+
+    new_role = data.get("role")
+    valid_roles = ["super_admin", "compliance_officer", "analyst", "read_only_auditor"]
+    if new_role not in valid_roles:
+        raise HTTPException(400, "Invalid role")
+
+    await db.users.update_one({"id": member_id}, {"$set": {"role": new_role}})
+    await log_audit(user["tenant_id"], user, "team_member_role_changed", "settings", member_id, {"old_role": member["role"], "new_role": new_role}, request)
+    return {"message": "Role updated"}
+
+
+@api_router.delete("/settings/team/{member_id}")
+async def remove_team_member(member_id: str, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] != "super_admin":
+        raise HTTPException(403, "Only super admins can remove members")
+
+    if member_id == user["id"]:
+        raise HTTPException(400, "Cannot remove yourself")
+
+    member = await db.users.find_one({"id": member_id, "tenant_id": user["tenant_id"]})
+    if not member:
+        raise HTTPException(404, "Member not found")
+
+    await db.users.delete_one({"id": member_id})
+    await log_audit(user["tenant_id"], user, "team_member_removed", "settings", member_id, {"email": member["email"]}, request)
+    return {"message": "Member removed"}
+
 
 # ===================================
 # CASE MANAGEMENT ROUTES

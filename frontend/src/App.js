@@ -12,6 +12,7 @@ import CaseDetailPage from "./pages/CaseDetailPage";
 import AuditLogPage from "./pages/AuditLogPage";
 import ScreeningHubPage from "./pages/ScreeningHubPage";
 import APIKeysPage from "./pages/APIKeysPage";
+import SettingsPage from "./pages/SettingsPage";
 import "@/App.css";
 
 // Protected Route wrapper
@@ -63,33 +64,7 @@ function DashboardLayout({ children }) {
 
 // AuditLogsPage placeholder removed - using imported AuditLogPage
 
-function SettingsPage() {
-  return (
-    <div>
-      <h1 style={{
-        fontSize: "26px",
-        fontWeight: "700",
-        letterSpacing: "-0.5px",
-        color: "#f1f5f9",
-        marginBottom: "8px"
-      }}>Settings</h1>
-      <p style={{ color: "#94a3b8", fontSize: "14px" }}>
-        Configure tenant settings and user management
-      </p>
-      <div style={{
-        background: "#0d1117",
-        border: "1px solid #1e2530",
-        borderRadius: "12px",
-        padding: "60px 24px",
-        marginTop: "24px",
-        textAlign: "center",
-        color: "#475569"
-      }}>
-        Settings coming soon
-      </div>
-    </div>
-  );
-}
+// SettingsPage placeholder removed - using imported SettingsPage
 
 function App() {
   return (

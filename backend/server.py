@@ -36,7 +36,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # Create the main app
-app = FastAPI(title="AMLGuard API")
+app = FastAPI(title="Rudrik API")
 api_router = APIRouter(prefix="/api")
 
 # Configure logging
@@ -92,8 +92,8 @@ async def create_default_tenant(db):
     if not tenant:
         tenant_doc = {
             "id": tenant_id,
-            "company_name": "AMLGuard Demo",
-            "primary_contact": os.environ.get("ADMIN_EMAIL", "admin@amlguard.com"),
+            "company_name": "Rudrik Demo",
+            "primary_contact": os.environ.get("ADMIN_EMAIL", "admin@rudrik.io"),
             "subscription_plan": "enterprise",
             "customer_limit": 999999,
             "customer_count": 0,
@@ -128,10 +128,10 @@ async def create_admin_user(db, tenant_id):
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(user_doc)
-        logger.info(f"Sentrix admin user created: {sentrix_email}")
+        logger.info(f"Primary admin user created: {sentrix_email}")
     
-    # Create default admin@amlguard.com admin
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@amlguard.com")
+    # Create default admin@rudrik.io admin
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@rudrik.io")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!@#")
     
     existing = await db.users.find_one({"email": admin_email})
@@ -165,9 +165,9 @@ def write_test_credentials(sentrix_email, sentrix_password, admin_email, admin_p
     """Write test credentials to file"""
     os.makedirs("/app/memory", exist_ok=True)
     with open("/app/memory/test_credentials.md", "w") as f:
-        f.write(f"""# AMLGuard Test Credentials
+        f.write(f"""# Rudrik Test Credentials
 
-## Sentrix Admin Account (Primary)
+## Primary Admin Account
 - Email: {sentrix_email}
 - Password: {sentrix_password}
 - Role: super_admin
@@ -850,7 +850,7 @@ async def seed_default_settings():
     settings_doc = {
         "tenant_id": "default-tenant",
         "general": {
-            "company_name": "AMLGuard Demo",
+            "company_name": "Rudrik Demo",
             "timezone": "Asia/Kolkata",
             "currency": "INR",
         },
@@ -887,9 +887,9 @@ async def seed_default_settings():
 async def seed_demo_team_members():
     """Seed demo team members for the Team tab."""
     team = [
-        {"name": "Priya Sharma", "email": "priya@sentrixai.com", "role": "compliance_officer"},
-        {"name": "Rahul Verma", "email": "rahul@sentrixai.com", "role": "analyst"},
-        {"name": "Anita Desai", "email": "anita@sentrixai.com", "role": "compliance_officer"},
+        {"name": "Priya Sharma", "email": "priya@rudrik.io", "role": "compliance_officer"},
+        {"name": "Rahul Verma", "email": "rahul@rudrik.io", "role": "analyst"},
+        {"name": "Anita Desai", "email": "anita@rudrik.io", "role": "compliance_officer"},
     ]
     for m in team:
         existing = await db.users.find_one({"email": m["email"]})
@@ -901,7 +901,7 @@ async def seed_demo_team_members():
             "name": m["name"],
             "role": m["role"],
             "tenant_id": "default-tenant",
-            "company_name": "AMLGuard Demo",
+            "company_name": "Rudrik Demo",
             "password_hash": "demo_placeholder",
             "is_active": True,
             "status": "active",
@@ -2313,7 +2313,7 @@ async def generate_sar_report(case_id: str, request: Request):
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "generated_by": user["name"],
         "case_id": case.get("case_id"),
-        "filing_institution": "AMLGuard — Sentrix AI",
+        "filing_institution": "Rudrik — Compliance Intelligence",
         "subject": {
             "full_name": customer_data.get("full_name", case.get("customer_name", "Unknown")),
             "date_of_birth": customer_data.get("date_of_birth", "N/A"),

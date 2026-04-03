@@ -1,5 +1,5 @@
 """
-Risk scoring helpers for AMLGuard.
+Risk scoring helpers for Rudrik.
 Centralises risk level calculation and CDD tier assignment.
 """
 

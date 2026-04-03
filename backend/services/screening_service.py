@@ -1,5 +1,5 @@
 """
-Mock Screening Service for AMLGuard.
+Mock Screening Service for Rudrik.
 Simulates PEP, Sanctions, and Adverse Media screening.
 Replace with real provider (Refinitiv, ComplyAdvantage, Dow Jones) in production.
 """

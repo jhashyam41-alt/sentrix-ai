@@ -1,5 +1,5 @@
 """
-Mock Email Service for AMLGuard.
+Mock Email Service for Rudrik.
 Currently logs emails to console. Replace with SendGrid in production.
 """
 import logging

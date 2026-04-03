@@ -4,7 +4,7 @@ import uuid
 from typing import Tuple
 
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
-APP_NAME = "amlguard"
+APP_NAME = "rudrik"
 
 storage_key = None
 

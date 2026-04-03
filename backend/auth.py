@@ -86,7 +86,7 @@ async def get_current_user(request: Request, db) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 class TOTPService:
-    def __init__(self, issuer_name: str = "AMLGuard"):
+    def __init__(self, issuer_name: str = "Rudrik"):
         self.issuer_name = issuer_name
     
     def generate_secret(self) -> str:

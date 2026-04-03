@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import { Shield, Lock, Mail } from "lucide-react";
+import { RudrikLogo } from "../components/RudrikLogo";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -154,7 +155,7 @@ export default function LoginPage() {
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
                  style={{ background: "rgba(37, 99, 235, 0.2)" }}>
-              <Shield className="w-8 h-8" style={{ color: "#2563eb" }} />
+              <RudrikLogo size={32} color="#2563eb" />
             </div>
             <h1 style={{
               fontSize: "26px",
@@ -162,7 +163,7 @@ export default function LoginPage() {
               letterSpacing: "-0.5px",
               color: "#f1f5f9",
               marginBottom: "8px"
-            }} data-testid="login-title">AMLGuard</h1>
+            }} data-testid="login-title">Rudrik</h1>
             <p style={{ color: "#94a3b8", fontSize: "14px" }}>
               Compliance & Risk Management Platform
             </p>
@@ -183,7 +184,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@amlguard.com"
+                  placeholder="you@rudrik.io"
                   className="w-full"
                   style={{
                     background: "#080c12",

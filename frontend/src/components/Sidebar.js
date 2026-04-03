@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { RudrikLogo } from "./RudrikLogo";
 import {
   Shield, LayoutDashboard, Users, FileSearch, AlertCircle,
   FileText, Settings, LogOut, Bell, Key
@@ -53,7 +54,7 @@ export default function Sidebar() {
             alignItems: "center",
             justifyContent: "center"
           }}>
-            <Shield className="w-5 h-5" style={{ color: "#ffffff" }} />
+            <RudrikLogo size={20} color="#ffffff" />
           </div>
           <div>
             <div style={{
@@ -61,13 +62,13 @@ export default function Sidebar() {
               fontWeight: "700",
               color: "#f1f5f9",
               letterSpacing: "-0.3px"
-            }}>AMLGuard</div>
+            }}>Rudrik</div>
             <div style={{
               fontSize: "10px",
               color: "#475569",
               textTransform: "uppercase",
               letterSpacing: "0.5px"
-            }}>Compliance</div>
+            }}>Compliance Intelligence</div>
           </div>
         </div>
       </div>
@@ -173,6 +174,13 @@ export default function Sidebar() {
           >
             <LogOut className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: "12px 20px", borderTop: "1px solid #1e2530" }}>
+        <div style={{ fontSize: "9px", color: "#334155", textAlign: "center", lineHeight: "1.4" }}>
+          &copy; 2026 Rudrik Technologies Pvt. Ltd.
         </div>
       </div>
     </div>

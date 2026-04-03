@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { Shield, Mail, Lock, User, Building } from "lucide-react";
+import { RudrikLogo } from "../components/RudrikLogo";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -97,7 +98,7 @@ export default function RegisterPage() {
           }}>
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
                  style={{ background: "rgba(16, 185, 129, 0.2)" }}>
-              <Shield className="w-8 h-8" style={{ color: "#10b981" }} />
+              <RudrikLogo size={32} color="#10b981" />
             </div>
             <h2 style={{
               fontSize: "22px",
@@ -126,7 +127,7 @@ export default function RegisterPage() {
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
                  style={{ background: "rgba(37, 99, 235, 0.2)" }}>
-              <Shield className="w-8 h-8" style={{ color: "#2563eb" }} />
+              <RudrikLogo size={32} color="#2563eb" />
             </div>
             <h1 style={{
               fontSize: "26px",
@@ -136,7 +137,7 @@ export default function RegisterPage() {
               marginBottom: "8px"
             }} data-testid="register-title">Create Account</h1>
             <p style={{ color: "#94a3b8", fontSize: "14px" }}>
-              Join AMLGuard Compliance Platform
+              Join Rudrik Compliance Platform
             </p>
           </div>
 
@@ -185,7 +186,7 @@ export default function RegisterPage() {
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Sentrix AI"
+                  placeholder="Rudrik Technologies"
                   className="w-full"
                   style={{
                     background: "#080c12",

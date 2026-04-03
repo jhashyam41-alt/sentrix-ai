@@ -1,5 +1,5 @@
 """
-PDF generation service for AMLGuard audit log exports.
+PDF generation service for Rudrik audit log exports.
 """
 import io
 from datetime import datetime, timezone
@@ -29,7 +29,7 @@ def generate_audit_pdf(logs: list) -> bytes:
     title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=16, spaceAfter=6)
 
     elements = [
-        Paragraph("AMLGuard \u2014 Audit Log Report", title_style),
+        Paragraph("Rudrik \u2014 Audit Log Report", title_style),
         Paragraph(
             f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}  |  Records: {len(logs)}",
             styles["Normal"],

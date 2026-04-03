@@ -8,39 +8,41 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 - **Backend**: FastAPI, PyOTP (2FA), PyJWT, Motor (MongoDB async)
 - **Database**: MongoDB
 - **Auth**: JWT + 2FA (TOTP), role-based (super_admin, compliance_officer, analyst, read_only_auditor)
-- **Shared deps**: `/app/backend/shared/deps.py` — centralised db, auth, audit. Routes import from here (no circular imports)
+- **Shared deps**: `/app/backend/shared/deps.py` — centralised db, auth, audit
 
 ## Completed Features
 
 ### Phase 1 — Core Platform (DONE)
-- Multi-tenant auth (login, register, 2FA setup/verify, logout)
+- Multi-tenant auth (login, register, 2FA, logout)
 - Role-based access control (4 roles)
 - Customer onboarding (individual + corporate)
 - Risk scoring engine
 - PEP, Sanctions, Adverse Media screening (mock)
 - Case management (create, notes, escalate, SAR, close)
 - Immutable audit logs with PDF/CSV export
-- CDD management (SDD/Standard/EDD, expiry tracking, EDD checklists)
-- File uploads (10MB max, PDF/JPG/PNG)
+- CDD management (SDD/Standard/EDD)
 
 ### Phase 2 — KYC/AML Integration (DONE - Mock Mode)
-- Signzy KYC: PAN, Aadhaar, Passport, Voter ID, DL verification (mock)
-- OpenSanctions: Individual, batch screening, FATF country detection (mock)
-- KYC Routes, Public API v1, API Key Management
-- Enhanced Dashboard: Risk distribution, screening alerts, KYC stats, CDD breakdown, integration status, API usage
-- Screening Hub: Individual + batch
-- Customer KYC Card: 5 document types with verify + history
+- Signzy KYC: PAN, Aadhaar, Passport, Voter ID, DL (mock)
+- OpenSanctions: Individual, batch, FATF country detection (mock)
+- Public API v1 with API key auth + rate limiting
+- Enhanced Dashboard with KYC/AML metrics
 
 ### Phase 3 — Code Quality Refactoring (DONE)
 - Eliminated circular imports (shared/deps.py)
-- Extracted dashboard stats → dashboard_service.py
-- Extracted risk scoring → risk_service.py (incl. calculate_v1_risk_score)
-- Split KYCVerificationCard → KYCDocForm + KYCResultDisplay
-- Split ScreeningHubPage → IndividualScreeningForm + ScreeningResultCard
-- Replaced 27 console.error calls → env-aware logger utility
-- Fixed nested ternaries in CDDManagementCard
-- Removed hardcoded test secrets
-- Fixed `is True` comparison anti-pattern
+- Extracted services (dashboard_service.py, risk_service.py)
+- Split large components into sub-components
+- Replaced console.error → env-aware logger
+
+### Phase 4 — Full Screening Page (DONE)
+- "New Screening" modal: Full Name, DOB, Nationality dropdown (36 countries), ID Type (PAN/Aadhaar/Passport/Voter ID/DL), ID Number, 4 check toggles (KYC, Sanctions, PEP, Adverse Media)
+- Animated progress panel: 5 steps with green checkmarks (600ms stagger)
+- Final result card: SVG risk score circle (0-100, color-coded), risk level badge, check breakdown (pass/fail), matched entities, "Create Investigation Case" button for MEDIUM+
+- Screening history table: Name, ID Type, Score, Risk Level badges, Checks, Date, Status, View/Rescreen actions
+- 30 seeded demo records with realistic Indian names
+- Filters: All/LOW/MEDIUM/HIGH/CRITICAL + search by name
+- Pagination (15 per page)
+- Backend: GET /api/screenings (paginated, filterable), POST /api/screenings/run, GET /api/screenings/{id}
 
 ## Pending Features
 

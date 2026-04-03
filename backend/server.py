@@ -1046,6 +1046,72 @@ async def get_dashboard_stats(request: Request):
     from services.dashboard_service import gather_dashboard_stats
     return await gather_dashboard_stats(db, user["tenant_id"], user["role"])
 
+
+@api_router.get("/dashboard/activity-feed")
+async def get_activity_feed(request: Request):
+    user = await get_current_user(request, db)
+    logs = await db.audit_logs.find(
+        {"tenant_id": user["tenant_id"]},
+        {"_id": 0, "id": 1, "timestamp": 1, "user_name": 1, "action_type": 1, "details": 1}
+    ).sort("timestamp", -1).limit(15).to_list(15)
+
+    action_labels = {
+        "screening_run": "Screening Complete",
+        "quick_screening_run": "Quick Screening",
+        "case_created": "New Case Opened",
+        "case_resolved": "Case Resolved",
+        "customer_created": "Customer Onboarded",
+        "customer_updated": "Customer Updated",
+        "user_login": "Logged In",
+        "sar_filed": "SAR Filed",
+        "sar_report_generated": "SAR Report Generated",
+        "case_status_changed": "Case Status Changed",
+        "case_assigned": "Case Assigned",
+        "api_key_created": "API Key Generated",
+        "settings_changed": "Settings Updated",
+    }
+
+    feed = []
+    for log in logs:
+        details = log.get("details", {})
+        feed.append({
+            "id": log.get("id", ""),
+            "timestamp": log["timestamp"],
+            "user_name": log["user_name"],
+            "action": action_labels.get(log["action_type"], log["action_type"].replace("_", " ").title()),
+            "customer_name": details.get("customer_name"),
+            "action_type": log["action_type"],
+        })
+
+    return {"feed": feed}
+
+
+@api_router.get("/dashboard/trends")
+async def get_dashboard_trends(request: Request):
+    user = await get_current_user(request, db)
+    now = datetime.now(timezone.utc)
+
+    days = []
+    for i in range(6, -1, -1):
+        day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        q = {"tenant_id": user["tenant_id"], "timestamp": {"$gte": day_start.isoformat(), "$lt": day_end.isoformat()}}
+
+        customers = await db.audit_logs.count_documents({**q, "action_type": "customer_created"})
+        screenings = await db.audit_logs.count_documents({**q, "action_type": {"$in": ["screening_run", "quick_screening_run"]}})
+        cases = await db.audit_logs.count_documents({**q, "action_type": {"$in": ["case_created", "case_resolved"]}})
+        risk = await db.audit_logs.count_documents({**q, "action_type": "screening_run", "details.result": {"$in": ["match", "potential_match"]}})
+
+        days.append({
+            "date": day_start.strftime("%b %d"),
+            "customers": customers,
+            "screenings": screenings,
+            "cases": cases,
+            "risk": risk,
+        })
+
+    return {"trends": days}
+
 # ===================================
 # CUSTOMER ROUTES
 # ===================================

@@ -65,10 +65,13 @@ async def startup_event():
     await db.tenants.create_index("company_name")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.login_attempts.create_index("identifier")
+    await db.screening_records.create_index([("tenant_id", 1), ("created_at", -1)])
     logger.info("Database indexes created")
     
     # Seed admin and tenant
     await seed_admin_and_tenant()
+    # Seed demo screening records
+    await seed_demo_screenings()
 
 async def create_default_tenant(db):
     """Create default tenant if it doesn't exist"""
@@ -175,6 +178,164 @@ async def seed_admin_and_tenant():
     tenant_id = await create_default_tenant(db)
     sentrix_email, sentrix_password, admin_email, admin_password = await create_admin_user(db, tenant_id)
     write_test_credentials(sentrix_email, sentrix_password, admin_email, admin_password)
+
+
+async def seed_demo_screenings():
+    """Seed 30 demo screening records with realistic Indian names and mixed results."""
+    count = await db.screening_records.count_documents({"tenant_id": "default-tenant"})
+    if count >= 30:
+        return
+
+    import random
+    import hashlib
+
+    names = [
+        ("Aarav Sharma", "M", "1990-03-12", "IN", "PAN", "BQNPS5678A"),
+        ("Priya Patel", "F", "1985-07-22", "IN", "AADHAAR", "987654321012"),
+        ("Rohan Gupta", "M", "1978-11-05", "IN", "PASSPORT", "J8765432"),
+        ("Ananya Singh", "F", "1992-01-18", "IN", "VOTER_ID", "MNL4567890"),
+        ("Vikram Reddy", "M", "1988-06-30", "IN", "DL", "AP0220190567890"),
+        ("Meera Iyer", "F", "1995-09-14", "IN", "PAN", "CXNPI3456B"),
+        ("Arjun Nair", "M", "1982-12-01", "IN", "AADHAAR", "567812345678"),
+        ("Kavya Joshi", "F", "1991-04-25", "IN", "PAN", "DHLPJ7890C"),
+        ("Siddharth Kumar", "M", "1975-08-19", "IN", "PASSPORT", "K1234567"),
+        ("Deepa Menon", "F", "1989-02-28", "IN", "VOTER_ID", "KRL6789012"),
+        ("Rajesh Verma", "M", "1980-10-15", "IN", "PAN", "AXMPV2345D"),
+        ("Shreya Rao", "F", "1993-06-08", "IN", "DL", "KA0120181234567"),
+        ("Aditya Mishra", "M", "1987-03-20", "IN", "AADHAAR", "234567890123"),
+        ("Neha Kapoor", "F", "1994-11-30", "IN", "PAN", "FHSPK6789E"),
+        ("Karan Malhotra", "M", "1983-05-17", "PK", "PASSPORT", "AB1234567"),
+        ("Pooja Deshmukh", "F", "1990-08-09", "IN", "VOTER_ID", "MH45678901"),
+        ("Varun Thakur", "M", "1986-01-23", "IN", "PAN", "GKLPT8901F"),
+        ("Ishita Bose", "F", "1996-07-12", "IN", "AADHAAR", "345678901234"),
+        ("Manish Agrawal", "M", "1979-09-04", "IN", "DL", "UP1420170987654"),
+        ("Ritu Saxena", "F", "1991-12-16", "IN", "PAN", "HMNPS4567G"),
+        ("Amit Chauhan", "M", "1984-04-28", "IR", "PASSPORT", "C9876543"),
+        ("Sunita Devi", "F", "1988-10-07", "IN", "VOTER_ID", "BR12345678"),
+        ("Pankaj Tiwari", "M", "1977-02-14", "IN", "PAN", "JQRPT1234H"),
+        ("Divya Hegde", "F", "1993-05-21", "IN", "AADHAAR", "456789012345"),
+        ("Nikhil Shetty", "M", "1990-08-30", "IN", "DL", "MH0220200123456"),
+        ("Geeta Pillai", "F", "1985-11-11", "IN", "PAN", "KXLPG5678I"),
+        ("Harish Choudhary", "M", "1981-07-03", "AF", "PASSPORT", "D5432198"),
+        ("Swati Kulkarni", "F", "1994-03-26", "IN", "PAN", "LMNPK9012J"),
+        ("Rakesh Pandey", "M", "1976-06-19", "IN", "VOTER_ID", "UP56789012"),
+        ("Anita Mahajan", "F", "1989-09-08", "MM", "PASSPORT", "E1234987"),
+    ]
+
+    checks_combos = [
+        ["kyc", "sanctions", "pep", "adverse_media"],
+        ["sanctions", "pep"],
+        ["kyc", "sanctions"],
+        ["kyc", "sanctions", "pep", "adverse_media"],
+        ["sanctions", "pep", "adverse_media"],
+    ]
+
+    statuses = ["completed", "completed", "completed", "completed", "completed",
+                "completed", "completed", "completed", "completed", "flagged"]
+
+    docs = []
+    base_time = datetime.now(timezone.utc) - timedelta(days=45)
+
+    for i, (name, gender, dob, nat, id_type, id_num) in enumerate(names):
+        seed = int(hashlib.md5(name.lower().encode()).hexdigest()[:8], 16)
+        r = random.Random(seed)
+
+        checks = checks_combos[i % len(checks_combos)]
+        has_sanction_match = r.random() < 0.15
+        has_pep_match = r.random() < 0.20
+        has_adverse_media = r.random() < 0.12
+
+        # Calculate risk
+        risk_score = 5
+        kyc_result = {"status": "verified" if r.random() < 0.85 else "failed", "mode": "demo"}
+        if kyc_result["status"] == "failed":
+            risk_score += 20
+
+        sanctions_result = {"status": "match" if has_sanction_match else "clear", "matches": []}
+        if has_sanction_match:
+            risk_score += 35
+            sanctions_result["matches"] = [{
+                "id": f"SANC-{r.randint(1000,9999)}",
+                "caption": f"Matched Entity {r.randint(1,50)}",
+                "score": round(r.uniform(0.55, 0.95), 2),
+                "datasets": [r.choice(["us_ofac_sdn", "eu_sanctions", "un_sc_sanctions"])],
+                "topics": ["sanction"],
+            }]
+
+        pep_result = {"status": "match" if has_pep_match else "clear", "matches": []}
+        if has_pep_match:
+            risk_score += 20
+            pep_result["matches"] = [{
+                "id": f"PEP-{r.randint(1000,9999)}",
+                "caption": f"PEP Match — {r.choice(['State Minister', 'MP', 'District Collector', 'Bank Director'])}",
+                "score": round(r.uniform(0.40, 0.85), 2),
+                "topics": ["role.pep"],
+            }]
+
+        adverse_media_result = {"status": "hits_found" if has_adverse_media else "clear", "hits": []}
+        if has_adverse_media:
+            risk_score += 15
+            adverse_media_result["hits"] = [{
+                "source": r.choice(["Times of India", "Economic Times", "NDTV", "Reuters"]),
+                "headline": r.choice([
+                    "Individual linked to financial irregularities",
+                    "Named in corporate fraud investigation",
+                    "Associated with money laundering probe",
+                ]),
+                "date": (base_time - timedelta(days=r.randint(30, 365))).strftime("%Y-%m-%d"),
+            }]
+
+        risk_score = min(risk_score, 100)
+        if risk_score <= 25:
+            risk_level = "LOW"
+        elif risk_score <= 50:
+            risk_level = "MEDIUM"
+        elif risk_score <= 75:
+            risk_level = "HIGH"
+        else:
+            risk_level = "CRITICAL"
+
+        created = base_time + timedelta(days=i * 1.5, hours=r.randint(0, 23), minutes=r.randint(0, 59))
+
+        # Use FATF high-risk countries for some entries
+        from services.opensanctions_service import get_country_risk
+        country_risk = get_country_risk(nat)
+        if country_risk and risk_score < 40:
+            risk_score += 10
+            if risk_score > 25:
+                risk_level = "MEDIUM"
+
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "tenant_id": "default-tenant",
+            "full_name": name,
+            "date_of_birth": dob,
+            "nationality": nat,
+            "gender": gender,
+            "id_type": id_type,
+            "id_number": id_num,
+            "checks_run": checks,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "status": statuses[i % len(statuses)],
+            "kyc_result": kyc_result if "kyc" in checks else None,
+            "sanctions_result": sanctions_result if "sanctions" in checks else None,
+            "pep_result": pep_result if "pep" in checks else None,
+            "adverse_media_result": adverse_media_result if "adverse_media" in checks else None,
+            "country_risk": country_risk,
+            "matched_entities": (
+                (sanctions_result.get("matches", []) if has_sanction_match else []) +
+                (pep_result.get("matches", []) if has_pep_match else [])
+            ),
+            "created_at": created.isoformat(),
+            "completed_at": (created + timedelta(seconds=r.randint(3, 12))).isoformat(),
+            "created_by": "system",
+            "mode": "demo",
+        })
+
+    await db.screening_records.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
+    await db.screening_records.insert_many(docs)
+    logger.info(f"Seeded {len(docs)} demo screening records")
 
 # ===================================
 # HELPER FUNCTIONS
@@ -1324,6 +1485,179 @@ async def screen_pep(customer_id: str, request: Request):
                    {"is_pep": pep_result.get("is_pep"), "pep_tier": pep_result.get("pep_tier")}, request)
     
     return {"message": "PEP screening completed", "pep_screening": pep_result}
+
+# ===================================
+# SCREENING HISTORY ROUTES
+# ===================================
+
+@api_router.get("/screenings")
+async def list_screenings(
+    request: Request,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    risk_level: str = Query(None),
+    status: str = Query(None),
+    search: str = Query(None),
+):
+    """List all screening records for the tenant."""
+    user = await get_current_user(request, db)
+    query = {"tenant_id": user["tenant_id"]}
+
+    if risk_level:
+        query["risk_level"] = risk_level.upper()
+    if status:
+        query["status"] = status
+    if search:
+        query["full_name"] = {"$regex": search, "$options": "i"}
+
+    total = await db.screening_records.count_documents(query)
+    skip = (page - 1) * limit
+    records = await db.screening_records.find(
+        query, {"_id": 0}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+
+    return {
+        "screenings": records,
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+    }
+
+
+@api_router.get("/screenings/{screening_id}")
+async def get_screening(screening_id: str, request: Request):
+    """Get a single screening record."""
+    user = await get_current_user(request, db)
+    record = await db.screening_records.find_one(
+        {"id": screening_id, "tenant_id": user["tenant_id"]}, {"_id": 0}
+    )
+    if not record:
+        raise HTTPException(404, "Screening record not found")
+    return record
+
+
+@api_router.post("/screenings/run")
+async def run_full_screening(data: dict, request: Request):
+    """Run a full screening and persist the record."""
+    user = await get_current_user(request, db)
+
+    full_name = data.get("fullName", "").strip()
+    if not full_name:
+        raise HTTPException(400, "fullName is required")
+
+    dob = data.get("dateOfBirth")
+    nationality = data.get("nationality", "")
+    id_type = data.get("idType", "")
+    id_number = data.get("idNumber", "")
+    checks = data.get("checks", ["sanctions", "pep"])
+
+    screening_id = str(uuid.uuid4())
+    risk_score = 5
+    kyc_result = None
+    sanctions_result = None
+    pep_result = None
+    adverse_media_result = None
+    matched_entities = []
+
+    # Step 1: KYC verification
+    if "kyc" in checks and id_type and id_number:
+        from services import signzy_service
+        kyc_fn = {
+            "PAN": lambda: signzy_service.verify_pan(id_number, full_name),
+            "AADHAAR": lambda: signzy_service.verify_aadhaar(id_number),
+            "VOTER_ID": lambda: signzy_service.verify_voter_id(id_number),
+            "PASSPORT": lambda: signzy_service.verify_passport(id_number),
+            "DL": lambda: signzy_service.verify_driving_license(id_number),
+        }.get(id_type.upper())
+        if kyc_fn:
+            kyc_result = await kyc_fn()
+            if kyc_result.get("status") == "failed":
+                risk_score += 20
+
+    # Step 2 & 3: Sanctions + PEP
+    screening_data = None
+    if "sanctions" in checks or "pep" in checks:
+        from services.opensanctions_service import screen_individual as svc_screen
+        screening_data = await svc_screen(full_name, dob, nationality)
+
+    if "sanctions" in checks:
+        has_sanction = screening_data.get("has_sanction_match", False) if screening_data else False
+        sanction_matches = [m for m in screening_data.get("matches", []) if "sanction" in m.get("topics", [])] if screening_data else []
+        sanctions_result = {"status": "match" if has_sanction else "clear", "matches": sanction_matches}
+        if has_sanction:
+            risk_score += 35
+            matched_entities.extend(sanction_matches)
+
+    if "pep" in checks:
+        has_pep = screening_data.get("has_pep_match", False) if screening_data else False
+        pep_matches = [m for m in screening_data.get("matches", []) if "role.pep" in m.get("topics", [])] if screening_data else []
+        pep_result = {"status": "match" if has_pep else "clear", "matches": pep_matches}
+        if has_pep:
+            risk_score += 20
+            matched_entities.extend(pep_matches)
+
+    # Step 4: Adverse media
+    if "adverse_media" in checks:
+        from services.screening_service import screening_service
+        am_data = {"full_name": full_name, "nationality": nationality}
+        am_result = await screening_service.screen_adverse_media(am_data)
+        has_hits = am_result.get("has_hits", False)
+        adverse_media_result = {
+            "status": "hits_found" if has_hits else "clear",
+            "hits": am_result.get("hits", []),
+        }
+        if has_hits:
+            risk_score += 15
+
+    # Country risk
+    from services.opensanctions_service import get_country_risk
+    country_risk = get_country_risk(nationality)
+    if country_risk:
+        risk_score += 10
+
+    risk_score = min(risk_score, 100)
+    if risk_score <= 25:
+        risk_level = "LOW"
+    elif risk_score <= 50:
+        risk_level = "MEDIUM"
+    elif risk_score <= 75:
+        risk_level = "HIGH"
+    else:
+        risk_level = "CRITICAL"
+
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": screening_id,
+        "tenant_id": user["tenant_id"],
+        "full_name": full_name,
+        "date_of_birth": dob,
+        "nationality": nationality,
+        "id_type": id_type,
+        "id_number": id_number,
+        "checks_run": checks,
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "status": "flagged" if risk_level in ("HIGH", "CRITICAL") else "completed",
+        "kyc_result": kyc_result,
+        "sanctions_result": sanctions_result,
+        "pep_result": pep_result,
+        "adverse_media_result": adverse_media_result,
+        "country_risk": country_risk,
+        "matched_entities": matched_entities,
+        "created_at": now,
+        "completed_at": now,
+        "created_by": user["id"],
+        "mode": "demo",
+    }
+
+    await db.screening_records.insert_one(doc)
+    doc.pop("_id", None)
+
+    await log_audit(user["tenant_id"], user, "screening_run", "screening", screening_id,
+                   {"full_name": full_name, "checks": checks, "risk_level": risk_level}, request)
+
+    return doc
+
 
 # ===================================
 # SCREENING ROUTES (MOCK)

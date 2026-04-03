@@ -132,3 +132,9 @@ code {
   outline: none;
   border-color: #2563eb;
 }
+
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}

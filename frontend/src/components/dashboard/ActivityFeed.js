@@ -17,6 +17,18 @@ const iconMap = {
   settings_changed: { Icon: SettingsIcon, color: "#64748b" },
 };
 
+function getIconForItem(item) {
+  const action = (item.action || "").toLowerCase();
+  if (action.includes("match found") || action.includes("high risk")) return { Icon: AlertTriangle, color: "#ef4444" };
+  if (action.includes("sar")) return { Icon: Flag, color: "#ef4444" };
+  if (action.includes("verified") || action.includes("kyc verified")) return { Icon: CheckCircle, color: "#10b981" };
+  if (action.includes("resolved")) return { Icon: CheckCircle, color: "#10b981" };
+  if (action.includes("onboarded")) return { Icon: UserPlus, color: "#14b8a6" };
+  if (action.includes("screening") || action.includes("screen")) return { Icon: Search, color: "#2563eb" };
+  if (action.includes("case")) return { Icon: AlertTriangle, color: "#f59e0b" };
+  return iconMap[item.action_type] || { Icon: CheckCircle, color: "#64748b" };
+}
+
 function timeAgo(timestamp) {
   const diff = (Date.now() - new Date(timestamp).getTime()) / 1000;
   if (diff < 60) return "just now";
@@ -33,8 +45,7 @@ export function ActivityFeed({ feed }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
       {feed.map((item, idx) => {
-        const iconConf = iconMap[item.action_type] || { Icon: CheckCircle, color: "#64748b" };
-        const { Icon, color } = iconConf;
+        const { Icon, color } = getIconForItem(item);
         const displayName = item.customer_name || item.user_name;
 
         return (

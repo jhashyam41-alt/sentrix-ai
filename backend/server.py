@@ -78,6 +78,8 @@ async def startup_event():
     await seed_demo_cases()
     # Seed demo audit logs
     await seed_demo_audit_logs()
+    # Seed recent activity for dashboard feed
+    await seed_recent_activity()
     # Seed default settings
     await seed_default_settings()
     # Seed demo team members
@@ -768,6 +770,77 @@ async def seed_demo_audit_logs():
     logger.info("Seeded 100 demo audit log entries")
 
 
+async def seed_recent_activity():
+    """Seed 15 diverse recent activity entries for the dashboard feed."""
+    # Always refresh recent feed entries on startup
+    await db.audit_logs.delete_many({"tenant_id": "default-tenant", "mode": "recent_feed"})
+
+    base_time = datetime.now(timezone.utc)
+    users_pool = [
+        {"id": "tm-001", "name": "Priya Sharma", "role": "compliance_officer"},
+        {"id": "tm-002", "name": "Rahul Verma", "role": "analyst"},
+        {"id": "tm-003", "name": "Anita Desai", "role": "compliance_officer"},
+        {"id": "admin-001", "name": "Shyam - Super Admin", "role": "super_admin"},
+    ]
+
+    entries = [
+        {"action_type": "screening_run", "module": "screening", "user_idx": 1,
+         "details": {"customer_name": "Rahul Sharma", "screening_type": "sanctions", "result": "clear", "score": 12}, "secs_ago": 10},
+        {"action_type": "screening_run", "module": "screening", "user_idx": 0,
+         "details": {"customer_name": "Priya Patel", "screening_type": "pep", "result": "match", "score": 78}, "secs_ago": 35},
+        {"action_type": "screening_run", "module": "screening", "user_idx": 1,
+         "details": {"customer_name": "Ahmed Khan", "screening_type": "sanctions", "result": "potential_match", "score": 85}, "secs_ago": 70},
+        {"action_type": "case_resolved", "module": "cases", "user_idx": 2,
+         "details": {"customer_name": "Vikram Mehta", "resolution_type": "false_positive", "days_open": 4}, "secs_ago": 120},
+        {"action_type": "screening_run", "module": "screening", "user_idx": 0,
+         "details": {"customer_name": "Anjali Gupta", "screening_type": "adverse_media", "result": "clear", "score": 22}, "secs_ago": 180},
+        {"action_type": "customer_created", "module": "customers", "user_idx": 1,
+         "details": {"customer_name": "Deepak Reddy", "customer_type": "individual", "risk_level": "low"}, "secs_ago": 250},
+        {"action_type": "case_created", "module": "cases", "user_idx": 0,
+         "details": {"customer_name": "Suresh Iyer", "case_type": "pep_match", "priority": "high"}, "secs_ago": 320},
+        {"action_type": "screening_run", "module": "screening", "user_idx": 2,
+         "details": {"customer_name": "Meera Joshi", "screening_type": "sanctions", "result": "clear", "score": 8}, "secs_ago": 400},
+        {"action_type": "sar_filed", "module": "cases", "user_idx": 2,
+         "details": {"customer_name": "Rajendra Prasad Yadav", "sar_reference": "SAR-2026-0412", "case_type": "pep_match"}, "secs_ago": 480},
+        {"action_type": "case_status_changed", "module": "cases", "user_idx": 1,
+         "details": {"customer_name": "Kabir Singhania", "old_status": "open", "new_status": "in_progress"}, "secs_ago": 560},
+        {"action_type": "customer_created", "module": "customers", "user_idx": 0,
+         "details": {"customer_name": "Nandini Bose", "customer_type": "corporate", "risk_level": "medium"}, "secs_ago": 640},
+        {"action_type": "screening_run", "module": "screening", "user_idx": 1,
+         "details": {"customer_name": "Farhan Qureshi", "screening_type": "pep", "result": "clear", "score": 15}, "secs_ago": 720},
+        {"action_type": "case_assigned", "module": "cases", "user_idx": 3,
+         "details": {"customer_name": "Manish Tiwari", "assigned_to": "Anita Desai"}, "secs_ago": 800},
+        {"action_type": "screening_run", "module": "screening", "user_idx": 2,
+         "details": {"customer_name": "Lakshmi Narayan", "screening_type": "adverse_media", "result": "potential_match", "score": 52}, "secs_ago": 880},
+        {"action_type": "user_login", "module": "auth", "user_idx": 3,
+         "details": {"customer_name": None, "method": "password", "success": True, "mfa_used": True}, "secs_ago": 960},
+    ]
+
+    import random
+    ips = ["10.0.1.15", "10.0.1.22", "10.0.2.8", "10.0.1.45"]
+
+    docs = []
+    for e in entries:
+        user = users_pool[e["user_idx"]]
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "tenant_id": "default-tenant",
+            "timestamp": (base_time - timedelta(seconds=e["secs_ago"])).isoformat(),
+            "user_id": user["id"],
+            "user_name": user["name"],
+            "user_role": user["role"],
+            "ip_address": random.choice(ips),
+            "action_type": e["action_type"],
+            "module": e["module"],
+            "record_id": str(uuid.uuid4()),
+            "details": e["details"],
+            "mode": "recent_feed",
+        })
+
+    await db.audit_logs.insert_many(docs)
+    logger.info("Seeded 15 recent activity entries for dashboard feed")
+
+
 async def seed_default_settings():
     """Seed default tenant settings if not present."""
     existing = await db.settings.find_one({"tenant_id": "default-tenant"})
@@ -1074,11 +1147,25 @@ async def get_activity_feed(request: Request):
     feed = []
     for log in logs:
         details = log.get("details", {})
+        action_type = log["action_type"]
+
+        # Generate richer labels based on details
+        if action_type == "screening_run" or action_type == "quick_screening_run":
+            result = details.get("result", "")
+            if result == "match":
+                label = details.get("screening_type", "").replace("_", " ").title() + " Match Found"
+            elif result == "potential_match":
+                label = "High Risk Alert"
+            else:
+                label = "KYC Verified"
+        else:
+            label = action_labels.get(action_type, action_type.replace("_", " ").title())
+
         feed.append({
             "id": log.get("id", ""),
             "timestamp": log["timestamp"],
             "user_name": log["user_name"],
-            "action": action_labels.get(log["action_type"], log["action_type"].replace("_", " ").title()),
+            "action": label,
             "customer_name": details.get("customer_name"),
             "action_type": log["action_type"],
         })

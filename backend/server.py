@@ -72,6 +72,8 @@ async def startup_event():
     await seed_admin_and_tenant()
     # Seed demo screening records
     await seed_demo_screenings()
+    # Seed demo customers
+    await seed_demo_customers()
 
 async def create_default_tenant(db):
     """Create default tenant if it doesn't exist"""
@@ -337,6 +339,234 @@ async def seed_demo_screenings():
     await db.screening_records.insert_many(docs)
     logger.info(f"Seeded {len(docs)} demo screening records")
 
+
+async def seed_demo_customers():
+    """Seed 25 demo customers with realistic Indian names, 3 PEP matches."""
+    count = await db.customers.count_documents({"tenant_id": "default-tenant", "mode": "demo"})
+    if count >= 25:
+        return
+
+    import random
+    import hashlib
+
+    CUSTOMERS = [
+        # PEP matches (3) — Indian politician-sounding names
+        {"name": "Rajendra Prasad Yadav", "dob": "1968-04-12", "nat": "IN", "gender": "M", "occupation": "Politician / MLA",
+         "pep": True, "pep_tier": "tier1", "pep_position": "Member of Legislative Assembly, Bihar",
+         "risk": 72, "sanctions": "no_match", "am": True},
+        {"name": "Smt. Laxmi Devi Sharma", "dob": "1975-08-22", "nat": "IN", "gender": "F", "occupation": "Cabinet Minister",
+         "pep": True, "pep_tier": "tier2", "pep_position": "State Cabinet Minister, Rajasthan",
+         "risk": 65, "sanctions": "no_match", "am": False},
+        {"name": "Balakrishnan Nair Pillai", "dob": "1962-01-30", "nat": "IN", "gender": "M", "occupation": "Senior Bureaucrat",
+         "pep": True, "pep_tier": "tier1", "pep_position": "Former Secretary, Ministry of Finance",
+         "risk": 78, "sanctions": "potential_match", "am": True},
+        # Regular customers (22)
+        {"name": "Aarav Mehta", "dob": "1990-05-15", "nat": "IN", "gender": "M", "occupation": "Software Engineer",
+         "pep": False, "risk": 12, "sanctions": "no_match", "am": False},
+        {"name": "Diya Agarwal", "dob": "1988-11-03", "nat": "IN", "gender": "F", "occupation": "CA / Auditor",
+         "pep": False, "risk": 8, "sanctions": "no_match", "am": False},
+        {"name": "Kabir Singhania", "dob": "1982-07-28", "nat": "IN", "gender": "M", "occupation": "Import/Export Business",
+         "pep": False, "risk": 45, "sanctions": "no_match", "am": True},
+        {"name": "Ananya Krishnamurthy", "dob": "1995-03-19", "nat": "IN", "gender": "F", "occupation": "Doctor",
+         "pep": False, "risk": 5, "sanctions": "no_match", "am": False},
+        {"name": "Rohit Choudhary", "dob": "1979-09-08", "nat": "IN", "gender": "M", "occupation": "Real Estate Developer",
+         "pep": False, "risk": 52, "sanctions": "no_match", "am": True},
+        {"name": "Priya Venkatesh", "dob": "1993-12-25", "nat": "IN", "gender": "F", "occupation": "Bank Manager",
+         "pep": False, "risk": 18, "sanctions": "no_match", "am": False},
+        {"name": "Arjun Saxena", "dob": "1986-06-14", "nat": "IN", "gender": "M", "occupation": "Jewellery Trader",
+         "pep": False, "risk": 38, "sanctions": "no_match", "am": False},
+        {"name": "Meera Jain", "dob": "1991-02-07", "nat": "IN", "gender": "F", "occupation": "Startup Founder",
+         "pep": False, "risk": 15, "sanctions": "no_match", "am": False},
+        {"name": "Siddharth Malhotra", "dob": "1977-10-30", "nat": "IN", "gender": "M", "occupation": "Shipping Logistics",
+         "pep": False, "risk": 55, "sanctions": "potential_match", "am": False},
+        {"name": "Neha Gupta", "dob": "1994-08-16", "nat": "IN", "gender": "F", "occupation": "Pharmacist",
+         "pep": False, "risk": 10, "sanctions": "no_match", "am": False},
+        {"name": "Vikram Thakur", "dob": "1984-01-22", "nat": "IN", "gender": "M", "occupation": "Construction Contractor",
+         "pep": False, "risk": 42, "sanctions": "no_match", "am": True},
+        {"name": "Rashi Oberoi", "dob": "1997-05-09", "nat": "IN", "gender": "F", "occupation": "IT Consultant",
+         "pep": False, "risk": 7, "sanctions": "no_match", "am": False},
+        {"name": "Manish Tiwari", "dob": "1973-03-18", "nat": "IN", "gender": "M", "occupation": "Money Exchange Operator",
+         "pep": False, "risk": 68, "sanctions": "potential_match", "am": True},
+        {"name": "Sunita Desai", "dob": "1989-07-04", "nat": "IN", "gender": "F", "occupation": "Teacher",
+         "pep": False, "risk": 6, "sanctions": "no_match", "am": False},
+        {"name": "Pankaj Chopra", "dob": "1981-11-27", "nat": "IN", "gender": "M", "occupation": "Restaurant Chain Owner",
+         "pep": False, "risk": 22, "sanctions": "no_match", "am": False},
+        {"name": "Kavya Nambiar", "dob": "1996-09-13", "nat": "IN", "gender": "F", "occupation": "Data Analyst",
+         "pep": False, "risk": 4, "sanctions": "no_match", "am": False},
+        {"name": "Harish Pandey", "dob": "1970-12-05", "nat": "IN", "gender": "M", "occupation": "Mining Business",
+         "pep": False, "risk": 60, "sanctions": "no_match", "am": True},
+        {"name": "Deepa Rajput", "dob": "1992-04-20", "nat": "IN", "gender": "F", "occupation": "Lawyer",
+         "pep": False, "risk": 14, "sanctions": "no_match", "am": False},
+        {"name": "Amit Bhatia", "dob": "1985-08-11", "nat": "PK", "gender": "M", "occupation": "Textile Exporter",
+         "pep": False, "risk": 48, "sanctions": "no_match", "am": False},
+        {"name": "Geeta Iyer", "dob": "1987-06-30", "nat": "IN", "gender": "F", "occupation": "Chartered Accountant",
+         "pep": False, "risk": 11, "sanctions": "no_match", "am": False},
+        {"name": "Nikhil Reddy", "dob": "1978-02-14", "nat": "IN", "gender": "M", "occupation": "Pharma Distributor",
+         "pep": False, "risk": 35, "sanctions": "no_match", "am": False},
+    ]
+
+    id_types = ["PAN", "AADHAAR", "PASSPORT", "VOTER_ID", "DL"]
+    kyc_statuses = ["verified", "verified", "verified", "pending", "failed"]
+    statuses_pool = ["approved", "approved", "approved", "under_review", "submitted"]
+    base_time = datetime.now(timezone.utc) - timedelta(days=90)
+
+    docs = []
+    timeline_docs = []
+    note_docs = []
+
+    for i, c in enumerate(CUSTOMERS):
+        cid = str(uuid.uuid4())
+        seed = int(hashlib.md5(c["name"].encode()).hexdigest()[:8], 16)
+        rng = random.Random(seed)
+        created = base_time + timedelta(days=i * 3, hours=rng.randint(0, 23))
+
+        risk = c["risk"]
+        if risk <= 30:
+            risk_level = "low"
+        elif risk <= 65:
+            risk_level = "medium"
+        else:
+            risk_level = "high"
+
+        if risk <= 30:
+            cdd_tier = "sdd"
+        elif risk <= 65:
+            cdd_tier = "standard_cdd"
+        else:
+            cdd_tier = "edd"
+
+        id_type = rng.choice(id_types)
+        kyc_status = kyc_statuses[i % len(kyc_statuses)]
+        status = statuses_pool[i % len(statuses_pool)]
+
+        pep_data = None
+        if c["pep"]:
+            pep_data = {
+                "is_pep": True,
+                "pep_tier": c.get("pep_tier", "tier1"),
+                "position": c.get("pep_position", ""),
+                "screened_at": (created + timedelta(hours=2)).isoformat(),
+            }
+            status = "under_review"
+
+        doc = {
+            "id": cid,
+            "tenant_id": "default-tenant",
+            "customer_type": "individual",
+            "status": status,
+            "risk_score": risk,
+            "risk_level": risk_level,
+            "cdd_tier": cdd_tier,
+            "cdd_status": "complete" if risk <= 30 else "in_progress",
+            "screening_status": "match" if c["pep"] or c["sanctions"] == "potential_match" else "no_match",
+            "sanctions_status": c["sanctions"],
+            "pep_status": "match" if c["pep"] else "no_match",
+            "adverse_media_status": "hits_found" if c["am"] else "no_hits",
+            "kyc_status": kyc_status,
+            "id_type": id_type,
+            "last_screened": (created + timedelta(days=rng.randint(1, 30))).isoformat(),
+            "created_at": created.isoformat(),
+            "updated_at": (created + timedelta(days=rng.randint(1, 10))).isoformat(),
+            "created_by": "system",
+            "mode": "demo",
+            "pep_screening": pep_data,
+            "customer_data": {
+                "full_name": c["name"],
+                "date_of_birth": c["dob"],
+                "nationality": c["nat"],
+                "gender": c["gender"],
+                "occupation": c["occupation"],
+                "country_of_residence": c["nat"],
+                "email": f"{c['name'].split()[0].lower()}@example.com",
+                "phone": f"+91 {rng.randint(70000, 99999)} {rng.randint(10000, 99999)}",
+            },
+            "documents": [
+                {"doc_type": id_type, "doc_number": f"DEMO-{rng.randint(100000, 999999)}", "status": kyc_status,
+                 "uploaded_at": (created + timedelta(minutes=30)).isoformat()},
+            ],
+            "risk_breakdown": {
+                "kyc": 20 if kyc_status == "failed" else 0,
+                "sanctions": 35 if c["sanctions"] == "potential_match" else 0,
+                "pep": 20 if c["pep"] else 0,
+                "adverse_media": 15 if c["am"] else 0,
+                "country_risk": 10 if c["nat"] in ("PK", "IR", "AF", "MM") else 0,
+                "occupation_risk": 10 if c["occupation"] in ("Money Exchange Operator", "Jewellery Trader", "Mining Business") else 0,
+            },
+        }
+        docs.append(doc)
+
+        # Build timeline events
+        events = [
+            {"type": "customer_created", "label": "Customer Onboarded", "ts": created},
+            {"type": "kyc_submitted", "label": f"KYC Document ({id_type}) Submitted", "ts": created + timedelta(minutes=30)},
+        ]
+        if kyc_status == "verified":
+            events.append({"type": "kyc_verified", "label": "KYC Verified", "ts": created + timedelta(hours=1)})
+        elif kyc_status == "failed":
+            events.append({"type": "kyc_failed", "label": "KYC Verification Failed", "ts": created + timedelta(hours=1)})
+        events.append({"type": "sanctions_screened", "label": "Sanctions Screening Completed",
+                       "ts": created + timedelta(hours=2), "result": c["sanctions"]})
+        events.append({"type": "pep_screened", "label": "PEP Screening Completed",
+                       "ts": created + timedelta(hours=2, minutes=10),
+                       "result": "match" if c["pep"] else "clear"})
+        if c["pep"]:
+            events.append({"type": "pep_match", "label": f"PEP Match Found — {c.get('pep_position', '')}",
+                          "ts": created + timedelta(hours=2, minutes=15)})
+            events.append({"type": "case_opened", "label": "Investigation Case Opened",
+                          "ts": created + timedelta(hours=3)})
+        if c["am"]:
+            events.append({"type": "adverse_media_hit", "label": "Adverse Media Hit Found",
+                          "ts": created + timedelta(hours=4)})
+        if c["sanctions"] == "potential_match":
+            events.append({"type": "sanctions_match", "label": "Potential Sanctions Match — Review Required",
+                          "ts": created + timedelta(hours=2, minutes=5)})
+
+        for ev in events:
+            timeline_docs.append({
+                "id": str(uuid.uuid4()),
+                "customer_id": cid,
+                "tenant_id": "default-tenant",
+                "event_type": ev["type"],
+                "label": ev["label"],
+                "result": ev.get("result"),
+                "timestamp": ev["ts"].isoformat(),
+                "mode": "demo",
+            })
+
+        # Add notes for some customers
+        if i < 8:
+            note_texts = [
+                "Initial KYC review completed. Documents appear valid.",
+                "Risk assessment reviewed and approved by compliance officer.",
+                "Customer provided additional documentation for verification.",
+                "Flagged for enhanced monitoring due to transaction patterns.",
+                "PEP screening completed. Match requires senior review.",
+                "Annual CDD review scheduled for next quarter.",
+                "Source of funds documentation verified.",
+                "Customer cooperative during due diligence process.",
+            ]
+            note_docs.append({
+                "id": str(uuid.uuid4()),
+                "customer_id": cid,
+                "tenant_id": "default-tenant",
+                "text": note_texts[i % len(note_texts)],
+                "created_by": "system",
+                "created_by_name": "Compliance Officer",
+                "created_at": (created + timedelta(days=rng.randint(1, 5))).isoformat(),
+                "mode": "demo",
+            })
+
+    await db.customers.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
+    await db.customer_timeline.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
+    await db.customer_notes.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
+
+    await db.customers.insert_many(docs)
+    if timeline_docs:
+        await db.customer_timeline.insert_many(timeline_docs)
+    if note_docs:
+        await db.customer_notes.insert_many(note_docs)
+    logger.info(f"Seeded {len(docs)} demo customers, {len(timeline_docs)} timeline events, {len(note_docs)} notes")
+
 # ===================================
 # HELPER FUNCTIONS
 # ===================================
@@ -587,6 +817,8 @@ async def list_customers(
     request: Request,
     status: Optional[str] = None,
     risk_level: Optional[str] = None,
+    kyc_status: Optional[str] = None,
+    nationality: Optional[str] = None,
     search: Optional[str] = None,
     limit: int = 50,
     skip: int = 0
@@ -599,6 +831,16 @@ async def list_customers(
         query["status"] = status
     if risk_level:
         query["risk_level"] = risk_level
+    if kyc_status:
+        query["kyc_status"] = kyc_status
+    if nationality:
+        query["customer_data.nationality"] = nationality
+    if search:
+        query["$or"] = [
+            {"customer_data.full_name": {"$regex": search, "$options": "i"}},
+            {"customer_data.company_legal_name": {"$regex": search, "$options": "i"}},
+            {"id": {"$regex": search, "$options": "i"}},
+        ]
     
     customers = await db.customers.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     total = await db.customers.count_documents(query)
@@ -641,6 +883,70 @@ async def update_customer(customer_id: str, data: dict, request: Request):
     await log_audit(user["tenant_id"], user, "customer_updated", "customers", customer_id, request=request)
     
     return {"message": "Customer updated successfully"}
+
+
+@api_router.get("/customers/{customer_id}/timeline")
+async def get_customer_timeline(customer_id: str, request: Request):
+    user = await get_current_user(request, db)
+    events = await db.customer_timeline.find(
+        {"customer_id": customer_id, "tenant_id": user["tenant_id"]}, {"_id": 0}
+    ).sort("timestamp", 1).to_list(100)
+    return {"events": events}
+
+
+@api_router.get("/customers/{customer_id}/notes")
+async def get_customer_notes(customer_id: str, request: Request):
+    user = await get_current_user(request, db)
+    notes = await db.customer_notes.find(
+        {"customer_id": customer_id, "tenant_id": user["tenant_id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return {"notes": notes}
+
+
+@api_router.post("/customers/{customer_id}/notes")
+async def add_customer_note(customer_id: str, data: dict, request: Request):
+    user = await get_current_user(request, db)
+    text = data.get("text", "").strip()
+    if not text:
+        raise HTTPException(400, "Note text is required")
+
+    note = {
+        "id": str(uuid.uuid4()),
+        "customer_id": customer_id,
+        "tenant_id": user["tenant_id"],
+        "text": text,
+        "created_by": user["id"],
+        "created_by_name": user.get("name", user.get("email", "Unknown")),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.customer_notes.insert_one(note)
+    note.pop("_id", None)
+
+    await log_audit(user["tenant_id"], user, "note_added", "customers", customer_id,
+                   {"note_preview": text[:80]}, request)
+
+    return note
+
+
+@api_router.get("/customers/{customer_id}/screenings")
+async def get_customer_screenings(customer_id: str, request: Request):
+    """Get all screening records for a customer (by name match)."""
+    user = await get_current_user(request, db)
+    customer = await db.customers.find_one(
+        {"id": customer_id, "tenant_id": user["tenant_id"]}, {"_id": 0, "customer_data": 1}
+    )
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    name = customer.get("customer_data", {}).get("full_name", "")
+    if not name:
+        return {"screenings": []}
+
+    screenings = await db.screening_records.find(
+        {"tenant_id": user["tenant_id"], "full_name": {"$regex": f"^{name}$", "$options": "i"}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    return {"screenings": screenings}
 
 # ===================================
 # CASES ROUTES

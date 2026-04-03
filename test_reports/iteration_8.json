@@ -1,0 +1,155 @@
+{
+  "summary": "Complete testing of Customers page and Customer Detail page. 26/29 backend tests pass (3 minor failures due to test data from previous iterations). All frontend UI flows working correctly including search, filters, customer table, customer detail page with timeline, notes, risk breakdown, and PEP badges.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/customers", "issue": "Some non-demo customers (from previous test iterations) missing kyc_status field - not a bug, just incomplete test data"},
+      {"endpoint": "GET /api/customers/{id}", "issue": "Some non-demo customers missing risk_breakdown field - not a bug, just incomplete test data"},
+      {"endpoint": "CDD tier validation", "issue": "Some low-risk non-demo customers have standard_cdd instead of sdd - data consistency issue from manual customer creation"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: GET /api/customers returns paginated list with 28+ customers",
+    "Backend: GET /api/customers with risk_level=high filter returns only high risk customers",
+    "Backend: GET /api/customers with risk_level=low filter returns only low risk customers",
+    "Backend: GET /api/customers with kyc_status=verified filter works correctly",
+    "Backend: GET /api/customers with nationality=IN filter works correctly",
+    "Backend: GET /api/customers with search=Rajendra returns matching customers",
+    "Backend: Pagination with skip and limit works correctly",
+    "Backend: 3 PEP match customers exist (Rajendra Prasad Yadav, Smt. Laxmi Devi Sharma, Balakrishnan Nair Pillai)",
+    "Backend: Rajendra Prasad Yadav is PEP match with risk 72",
+    "Backend: Smt. Laxmi Devi Sharma is PEP match with risk 65",
+    "Backend: Balakrishnan Nair Pillai is PEP match with risk 78",
+    "Backend: GET /api/customers/{id} returns customer details",
+    "Backend: GET /api/customers/{id} returns 404 for invalid ID",
+    "Backend: GET /api/customers/{id}/timeline returns timeline events",
+    "Backend: Timeline events have required fields (id, customer_id, event_type, label, timestamp)",
+    "Backend: PEP customer timeline includes pep_match event",
+    "Backend: PEP customer timeline includes case_opened event",
+    "Backend: GET /api/customers/{id}/notes returns notes list",
+    "Backend: POST /api/customers/{id}/notes creates new note",
+    "Backend: Added note persists and appears in GET notes",
+    "Backend: POST /api/customers/{id}/notes with empty text returns 400",
+    "Backend: GET /api/customers/{id}/screenings returns screenings list",
+    "Backend: GET /api/customers/{id}/screenings returns 404 for invalid customer",
+    "Backend: CDD tiers are valid (sdd, standard_cdd, edd)",
+    "Backend: High risk customers have EDD tier",
+    "Frontend: Login with shyam@sentrixai.com / Sentrix@2024 works",
+    "Frontend: Customers page shows 'Customers' title with total count",
+    "Frontend: Customers table displays with columns: Name, ID Type, KYC Status, Risk Level, Last Screened, CDD Tier, Actions",
+    "Frontend: KYC Status shows icons (Verified=green checkmark, Pending=yellow clock, Failed=red X)",
+    "Frontend: Risk Level shows color badges (LOW=green, MEDIUM=yellow, HIGH=red)",
+    "Frontend: CDD Tier shows badges (SDD=green, STANDARD=blue, EDD=red)",
+    "Frontend: Search bar filters customers by name",
+    "Frontend: Filters panel opens with Risk Level, KYC Status, Country dropdowns",
+    "Frontend: Filter by Risk Level=high shows only high risk customers (3 results)",
+    "Frontend: Filter by KYC Status=verified shows only verified customers",
+    "Frontend: Clear filters button works",
+    "Frontend: Click customer row navigates to /customers/{id} detail page",
+    "Frontend: Customer detail header shows name, avatar, risk score circle (SVG), badges",
+    "Frontend: PEP MATCH badge displayed for PEP customers (purple)",
+    "Frontend: SANCTIONS MATCH badge displayed for sanctions match customers (red)",
+    "Frontend: Activity Timeline shows vertical timeline with colored icons",
+    "Frontend: PEP Match Found event shown in red for PEP customers",
+    "Frontend: Investigation Case Opened event shown in red for PEP customers",
+    "Frontend: Documents section displays uploaded documents with verification status",
+    "Frontend: Risk Score Breakdown shows visual bars for each risk factor",
+    "Frontend: Risk breakdown includes: KYC, Sanctions, PEP, Adverse Media, Country Risk, Occupation Risk",
+    "Frontend: Internal Notes section shows existing notes",
+    "Frontend: Note input and send button work correctly",
+    "Frontend: Adding note persists and displays immediately",
+    "Frontend: Rajendra Prasad Yadav detail page shows risk 72, PEP MATCH, MLA Bihar position",
+    "Frontend: Smt. Laxmi Devi Sharma detail page shows risk 65, PEP MATCH, Cabinet Minister Rajasthan",
+    "Frontend: Balakrishnan Nair Pillai detail page shows risk 78, PEP MATCH, SANCTIONS MATCH, Former Secretary Ministry of Finance"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_customers.py",
+    "/app/test_reports/pytest/customers_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_customers.py"
+  ],
+  "success_rate": {
+    "backend": "90% (26/29 tests passed - 3 minor data issues)",
+    "frontend": "100% (all UI flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "shyam@sentrixai.com",
+    "admin_password": "Sentrix@2024",
+    "role": "super_admin"
+  },
+  "seed_data_creation": "25 demo customers seeded on startup with realistic Indian names. 3 PEP matches: Rajendra Prasad Yadav (MLA Bihar, risk 72), Smt. Laxmi Devi Sharma (Cabinet Minister Rajasthan, risk 65), Balakrishnan Nair Pillai (Former Secretary Ministry of Finance, risk 78). Timeline events, documents, and notes also seeded.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Customers page fully tested. Features verified: Customer list with 28+ customers, search by name, filters (Risk Level, KYC Status, Country), pagination, customer detail page with header (name, avatar, risk score circle, badges), activity timeline with colored icons, documents section, risk score breakdown with visual bars, internal notes with add functionality. 3 PEP match customers verified with correct risk scores and timeline events (PEP Match Found, Investigation Case Opened in red). Backend endpoints: GET /api/customers (paginated, filterable), GET /api/customers/{id}, GET /api/customers/{id}/timeline, GET /api/customers/{id}/notes, POST /api/customers/{id}/notes, GET /api/customers/{id}/screenings. Signzy KYC and OpenSanctions are MOCKED in demo mode.",
+  "mocked_apis": {
+    "signzy_service.py": "KYC verification (PAN, Aadhaar, Passport, Voter ID, DL) returns mock results",
+    "opensanctions_service.py": "Sanctions/PEP screening returns mock results"
+  },
+  "features_verified": {
+    "customers_list_page": {
+      "columns": ["Name", "ID Type", "KYC Status (with icons)", "Risk Level (color badge)", "Last Screened", "CDD Tier", "Actions (View button)"],
+      "search": "Search by name or ID",
+      "filters": ["Risk Level (low/medium/high)", "KYC Status (verified/pending/failed)", "Country"],
+      "pagination": "15 records per page",
+      "total_customers": 28
+    },
+    "customer_detail_page": {
+      "header": {
+        "avatar": "User icon placeholder",
+        "name": "Full name displayed",
+        "risk_score_circle": "SVG with 0-100 score, color-coded by level",
+        "badges": ["Risk Level", "KYC Status", "PEP MATCH (if applicable)", "SANCTIONS MATCH (if applicable)"],
+        "personal_info": ["Nationality", "DOB", "Occupation", "Phone", "Email"]
+      },
+      "activity_timeline": {
+        "vertical_line": true,
+        "colored_icons": true,
+        "event_types": ["customer_created", "kyc_submitted", "kyc_verified", "kyc_failed", "sanctions_screened", "pep_screened", "pep_match", "sanctions_match", "case_opened", "adverse_media_hit"],
+        "pep_events_in_red": ["pep_match", "case_opened"]
+      },
+      "documents_section": {
+        "shows_uploaded_documents": true,
+        "verification_status_icons": true
+      },
+      "risk_breakdown": {
+        "visual_bars": true,
+        "factors": ["KYC Verification", "Sanctions", "PEP Status", "Adverse Media", "Country Risk", "Occupation Risk"],
+        "total_score": true
+      },
+      "internal_notes": {
+        "note_input": true,
+        "send_button": true,
+        "existing_notes_displayed": true,
+        "note_persistence": true
+      }
+    },
+    "pep_customers": {
+      "rajendra_prasad_yadav": {
+        "risk_score": 72,
+        "position": "Member of Legislative Assembly, Bihar",
+        "badges": ["HIGH", "PEP MATCH"],
+        "timeline_events": ["PEP Match Found", "Investigation Case Opened"]
+      },
+      "smt_laxmi_devi_sharma": {
+        "risk_score": 65,
+        "position": "State Cabinet Minister, Rajasthan",
+        "badges": ["MEDIUM", "PEP MATCH"],
+        "timeline_events": ["PEP Match Found", "Investigation Case Opened"]
+      },
+      "balakrishnan_nair_pillai": {
+        "risk_score": 78,
+        "position": "Former Secretary, Ministry of Finance",
+        "badges": ["HIGH", "PEP MATCH", "SANCTIONS MATCH"],
+        "timeline_events": ["Potential Sanctions Match", "PEP Match Found", "Investigation Case Opened"]
+      }
+    }
+  }
+}

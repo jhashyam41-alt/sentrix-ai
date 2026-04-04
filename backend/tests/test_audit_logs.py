@@ -2,26 +2,27 @@
 Audit Logs API Tests
 Tests for: GET /api/audit-logs, GET /api/audit-logs/stats, GET /api/audit-logs/filters, GET /api/audit-logs/export/csv
 """
+from __future__ import annotations
+
 import pytest
 import requests
-import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
+
 
 class TestAuditLogsAPI:
     """Audit Logs endpoint tests"""
     
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self) -> None:
         """Login and get session with auth cookie"""
         self.session = requests.Session()
         login_response = self.session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "shyam@sentrixai.com", "password": "Sentrix@2024"}
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
         assert login_response.status_code == 200, f"Login failed: {login_response.text}"
-        # Cookie is set automatically by session
     
     # ==================== GET /api/audit-logs/stats ====================
     def test_audit_stats_returns_200(self):

@@ -66,7 +66,7 @@ async def screen_individual(name: str, date_of_birth: str = None, nationality: s
 
 def _build_demo_result(name: str, dob: str = None, nationality: str = None) -> dict:
     """Construct a realistic demo screening result."""
-    seed = int(hashlib.md5(name.lower().encode()).hexdigest()[:8], 16)
+    seed = int(hashlib.sha256(name.lower().encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
 
     has_match = rng.random() < 0.3

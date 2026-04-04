@@ -1,17 +1,17 @@
 """
-Test Case Management Module for AMLGuard
+Test Case Management Module for Rudrik
 Tests: Cases CRUD, Notes, Escalation, SAR Filing, Case Closure, Auto-case creation on screening
 """
+from __future__ import annotations
+
 import pytest
 import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://risk-screening.preview.emergentagent.com').rstrip('/')
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
-# Test credentials from environment
-TEST_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', '')
-TEST_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', '')
+EXISTING_CUSTOMER_ID: str = os.environ.get('TEST_CUSTOMER_ID', '')
 EXISTING_CUSTOMER_ID = os.environ.get('TEST_CUSTOMER_ID', '')
 
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import axios from "axios";
 import logger from "../../utils/logger";
 import { UserPlus, Pencil, Trash2, X, Send } from "lucide-react";
@@ -35,6 +35,15 @@ export function TeamTab({ team, onRefreshTeam }) {
   const [inviting, setInviting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editRole, setEditRole] = useState("");
+
+  const teamWithBadges = useMemo(
+    () => team.map((m) => ({
+      ...m,
+      rb: roleBadge(m.role),
+      sb: statusBadge(m.status),
+    })),
+    [team],
+  );
 
   const handleInvite = async () => {
     if (!inviteForm.name.trim() || !inviteForm.email.trim()) return;
@@ -135,9 +144,8 @@ export function TeamTab({ team, onRefreshTeam }) {
           </tr>
         </thead>
         <tbody>
-          {team.map((m, idx) => {
-            const rb = roleBadge(m.role);
-            const sb = statusBadge(m.status);
+          {teamWithBadges.map((m, idx) => {
+            const { rb, sb } = m;
             const isEditing = editingId === m.id;
             return (
               <tr key={m.id || idx} data-testid={`team-row-${idx}`}

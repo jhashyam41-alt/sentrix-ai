@@ -2,14 +2,12 @@
 Settings Page Backend API Tests
 Tests for: General, Risk Scoring, Integrations, Notifications, Team Members, Compliance Rules
 """
+from __future__ import annotations
+
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-
-# Test credentials from shared config
-from tests.conftest import TEST_EMAIL, TEST_PASSWORD
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 
 class TestSettingsAuth:

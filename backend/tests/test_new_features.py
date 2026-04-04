@@ -1,20 +1,17 @@
 """
-Test suite for new AMLGuard features:
+Test suite for Rudrik features:
 - KYC Verification endpoints (Signzy mock)
 - API Key management
 - Public API v1 endpoints
 - Quick screening endpoint
 """
+from __future__ import annotations
+
 import pytest
 import requests
-import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://risk-screening.preview.emergentagent.com').rstrip('/')
-
-# Test credentials from environment
-TEST_EMAIL = os.environ.get('TEST_ADMIN_EMAIL', 'shyam@sentrixai.com')
-TEST_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', 'Sentrix@2024')
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 
 class TestAuth:

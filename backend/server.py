@@ -249,7 +249,7 @@ async def seed_demo_screenings():
     base_time = datetime.now(timezone.utc) - timedelta(days=45)
 
     for i, (name, gender, dob, nat, id_type, id_num) in enumerate(names):
-        seed = int(hashlib.md5(name.lower().encode()).hexdigest()[:8], 16)
+        seed = int(hashlib.sha256(name.lower().encode()).hexdigest()[:8], 16)
         r = random.Random(seed)
 
         checks = checks_combos[i % len(checks_combos)]
@@ -426,7 +426,7 @@ async def seed_demo_customers():
 
     for i, c in enumerate(CUSTOMERS):
         cid = str(uuid.uuid4())
-        seed = int(hashlib.md5(c["name"].encode()).hexdigest()[:8], 16)
+        seed = int(hashlib.sha256(c["name"].encode()).hexdigest()[:8], 16)
         rng = random.Random(seed)
         created = base_time + timedelta(days=i * 3, hours=rng.randint(0, 23))
 
@@ -1146,7 +1146,7 @@ async def get_activity_feed(request: Request):
 
     feed = []
     for log in logs:
-        details = log.get("details", {})
+        details = log.get("details") or {}
         action_type = log["action_type"]
 
         # Generate richer labels based on details

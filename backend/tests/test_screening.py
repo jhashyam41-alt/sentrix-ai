@@ -4,25 +4,27 @@ Test suite for Screening Hub endpoints:
 - POST /api/screenings/run - Run a new screening
 - GET /api/screenings/{id} - Get single screening record
 """
+from __future__ import annotations
+
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
+
 
 class TestScreeningEndpoints:
     """Screening Hub API tests"""
     
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self) -> None:
         """Setup - login and get auth cookies"""
         self.session = requests.Session()
         login_response = self.session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "shyam@sentrixai.com", "password": "Sentrix@2024"}
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
         assert login_response.status_code == 200, f"Login failed: {login_response.text}"
-        self.auth_token = login_response.json().get("access_token")
+        self.auth_token: str = login_response.json().get("access_token")
         self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
         print(f"Login successful, token obtained")
     

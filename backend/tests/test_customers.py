@@ -3,14 +3,12 @@ Test suite for Customers page endpoints
 Tests: GET /api/customers, GET /api/customers/{id}, GET /api/customers/{id}/timeline,
        GET /api/customers/{id}/notes, POST /api/customers/{id}/notes, GET /api/customers/{id}/screenings
 """
+from __future__ import annotations
+
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-
-# Test credentials from shared config
-from tests.conftest import TEST_EMAIL, TEST_PASSWORD
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 # PEP match customer names for verification
 PEP_CUSTOMERS = [

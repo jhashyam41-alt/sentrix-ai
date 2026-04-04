@@ -5,26 +5,27 @@ Tests: GET /api/cases, GET /api/cases/stats, PATCH /api/cases/{id}/status,
        POST /api/cases/{id}/generate-sar, GET /api/team-members,
        GET /api/cases/{id}/notes, POST /api/cases/{id}/notes
 """
+from __future__ import annotations
+
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
+
 
 class TestCasesBackend:
     """Test suite for Cases page backend endpoints"""
     
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self) -> None:
         """Login and get auth token before each test"""
         self.session = requests.Session()
         login_response = self.session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "shyam@sentrixai.com", "password": "Sentrix@2024"}
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
         assert login_response.status_code == 200, f"Login failed: {login_response.text}"
-        self.token = login_response.json().get("access_token")
-        # Set cookie for subsequent requests
+        self.token: str = login_response.json().get("access_token")
         self.session.cookies.set("access_token", self.token)
     
     # ==========================================

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 
 const EDD_ITEMS = [
   { key: "enhanced_sof_evidence", label: "Enhanced Source of Funds Evidence Collected" },
@@ -28,7 +28,14 @@ const getCDDStatusBadge = (status) => {
   return "warning";
 };
 
-export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdateCDDStatus, onToggleEDDItem }) => (
+export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdateCDDStatus, onToggleEDDItem }) => {
+  const cddButtons = useMemo(() => [
+    { status: "in_progress", label: "In Progress", activeColor: "#2563eb", show: true },
+    { status: "complete", label: "Complete", activeColor: "#10b981", show: customer.cdd_tier !== "edd" },
+    { status: "edd_in_progress", label: "EDD In Progress", activeColor: "#f59e0b", show: customer.cdd_tier === "edd" },
+  ].filter(b => b.show), [customer.cdd_tier]);
+
+  return (
   <div style={{
     background: "#0d1117",
     border: "1px solid #1e2530",
@@ -95,11 +102,7 @@ export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdat
         Update CDD Status
       </div>
       <div className="flex flex-wrap gap-2">
-        {[
-          { status: "in_progress", label: "In Progress", activeColor: "#2563eb", show: true },
-          { status: "complete", label: "Complete", activeColor: "#10b981", show: customer.cdd_tier !== "edd" },
-          { status: "edd_in_progress", label: "EDD In Progress", activeColor: "#f59e0b", show: customer.cdd_tier === "edd" },
-        ].filter(b => b.show).map((btn) => (
+        {cddButtons.map((btn) => (
           <button
             key={btn.status}
             onClick={() => onUpdateCDDStatus(btn.status)}
@@ -183,4 +186,5 @@ export const CDDManagementCard = ({ customer, eddChecklist, updatingCDD, onUpdat
       </div>
     )}
   </div>
-);
+  );
+};

@@ -9,9 +9,8 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-# Test credentials
-TEST_EMAIL = "shyam@sentrixai.com"
-TEST_PASSWORD = "Sentrix@2024"
+# Test credentials from shared config
+from tests.conftest import TEST_EMAIL, TEST_PASSWORD
 
 # PEP match customer names for verification
 PEP_CUSTOMERS = [

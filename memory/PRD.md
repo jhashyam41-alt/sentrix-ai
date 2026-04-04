@@ -24,9 +24,18 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 - Phase 8: Settings (6 tabs: General, Risk Scoring, Integrations, Notifications, Team, Compliance)
 - Phase 9: Premium Dashboard (Count-up, Sparklines, Donut, India Map, Activity Feed, Quick Screen)
 - Phase 10: Full Rebrand (AMLGuard → Rudrik) — All UI, backend, meta tags, emails, SAR reports
+- Phase 11: Code Quality P0 Fixes (Feb 2026)
+  - Replaced hashlib.md5 → hashlib.sha256 in 3 files (opensanctions_service.py, server.py x2)
+  - Centralized test credentials via conftest.py (removed hardcoded secrets from 9 test files)
+  - Added type hints to shared/deps.py and all test file headers
+  - Added useMemo optimizations to CDDManagementCard.js and TeamTab.js
+  - Fixed activity feed NoneType bug (details field could be None)
+  - Verified logger.js already silences console in production
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports
+- P1: Component Splitting (CaseDetailPage.js 396L, RegisterPage.js 358L, CaseDetailPanel.js 322L)
+- P1: Backend refactoring (extract seed functions to services/seed_service.py)
 - P2: Stripe Billing integration (`/settings/billing`)
 - P2: Webhooks notification system
 - P2: In-App Notifications Bell + SendGrid emails
@@ -34,3 +43,9 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 
 ## Test Credentials
 - Primary: shyam@sentrixai.com / Sentrix@2024 (super_admin)
+- Default: admin@rudrik.io / Rudrik2026!@# (super_admin)
+
+## Known Items
+- Settings company_name in DB may show "AMLGuard Demo" if not reset (seed only runs if no existing settings doc)
+- Signzy KYC and OpenSanctions screening are MOCKED
+- 8/211 backend tests fail due to endpoints not yet implemented (PEP, adverse-media, bulk screening)

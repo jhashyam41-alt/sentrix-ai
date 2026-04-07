@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
-import { Shield, Lock, Mail } from "lucide-react";
-import { RudrikLogo } from "../components/RudrikLogo";
+import { Lock, Mail } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -153,10 +152,13 @@ export default function LoginPage() {
           padding: "32px"
         }}>
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-                 style={{ background: "rgba(37, 99, 235, 0.2)" }}>
-              <RudrikLogo size={32} color="#2563eb" />
-            </div>
+            <a href="https://rudrik.io" target="_blank" rel="noopener noreferrer" data-testid="login-logo-link">
+              <img
+                src="/rudrik-logo.svg"
+                alt="Rudrik"
+                style={{ width: "64px", height: "64px", margin: "0 auto 16px", borderRadius: "10px" }}
+              />
+            </a>
             <h1 style={{
               fontSize: "26px",
               fontWeight: "700",

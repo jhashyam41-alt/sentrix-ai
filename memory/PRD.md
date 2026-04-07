@@ -31,6 +31,11 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Added useMemo optimizations to CDDManagementCard.js and TeamTab.js
   - Fixed activity feed NoneType bug (details field could be None)
   - Verified logger.js already silences console in production
+- Phase 12: Logo & Website Integration (Feb 2026)
+  - Integrated custom Rudra Flame Shield SVG logo (trishul + fire + shield)
+  - Logo replaces inline SVG on Sidebar, Login, and Register pages
+  - Sidebar logo + footer link to https://rudrik.io
+  - Login/Register logos link to https://rudrik.io
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports

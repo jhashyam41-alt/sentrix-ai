@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import { Shield, Mail, Lock, User, Building } from "lucide-react";
-import { RudrikLogo } from "../components/RudrikLogo";
+import { Mail, Lock, User, Building } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -98,7 +97,7 @@ export default function RegisterPage() {
           }}>
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
                  style={{ background: "rgba(16, 185, 129, 0.2)" }}>
-              <RudrikLogo size={32} color="#10b981" />
+              <img src="/rudrik-logo.svg" alt="Rudrik" style={{ width: "32px", height: "32px", borderRadius: "6px" }} />
             </div>
             <h2 style={{
               fontSize: "22px",
@@ -125,10 +124,13 @@ export default function RegisterPage() {
           padding: "32px"
         }}>
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-                 style={{ background: "rgba(37, 99, 235, 0.2)" }}>
-              <RudrikLogo size={32} color="#2563eb" />
-            </div>
+            <a href="https://rudrik.io" target="_blank" rel="noopener noreferrer" data-testid="register-logo-link">
+              <img
+                src="/rudrik-logo.svg"
+                alt="Rudrik"
+                style={{ width: "64px", height: "64px", margin: "0 auto 16px", borderRadius: "10px" }}
+              />
+            </a>
             <h1 style={{
               fontSize: "26px",
               fontWeight: "700",

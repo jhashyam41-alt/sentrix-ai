@@ -1,7 +1,6 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { RudrikLogo } from "./RudrikLogo";
 import {
   Shield, LayoutDashboard, Users, FileSearch, AlertCircle,
   FileText, Settings, LogOut, Bell, Key
@@ -40,38 +39,45 @@ export default function Sidebar() {
       flexDirection: "column"
     }}>
       {/* Logo */}
-      <div style={{
-        padding: "24px 20px",
-        borderBottom: "1px solid #1e2530"
-      }}>
-        <div className="flex items-center gap-3">
-          <div style={{
-            width: "36px",
-            height: "36px",
-            borderRadius: "8px",
-            background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }}>
-            <RudrikLogo size={20} color="#ffffff" />
-          </div>
-          <div>
-            <div style={{
-              fontSize: "16px",
-              fontWeight: "700",
-              color: "#f1f5f9",
-              letterSpacing: "-0.3px"
-            }}>Rudrik</div>
-            <div style={{
-              fontSize: "10px",
-              color: "#475569",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px"
-            }}>Compliance Intelligence</div>
+      <a
+        href="https://rudrik.io"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ textDecoration: "none" }}
+        data-testid="sidebar-logo-link"
+      >
+        <div style={{
+          padding: "24px 20px",
+          borderBottom: "1px solid #1e2530",
+          cursor: "pointer",
+          transition: "background 0.2s ease",
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#131923"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+        >
+          <div className="flex items-center gap-3">
+            <img
+              src="/rudrik-logo.svg"
+              alt="Rudrik"
+              style={{ width: "36px", height: "36px", borderRadius: "6px" }}
+            />
+            <div>
+              <div style={{
+                fontSize: "16px",
+                fontWeight: "700",
+                color: "#f1f5f9",
+                letterSpacing: "-0.3px"
+              }}>Rudrik</div>
+              <div style={{
+                fontSize: "10px",
+                color: "#475569",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px"
+              }}>Compliance Intelligence</div>
+            </div>
           </div>
         </div>
-      </div>
+      </a>
 
       {/* Navigation */}
       <div style={{
@@ -182,6 +188,25 @@ export default function Sidebar() {
         <div style={{ fontSize: "9px", color: "#334155", textAlign: "center", lineHeight: "1.4" }}>
           &copy; 2026 Rudrik Technologies Pvt. Ltd.
         </div>
+        <a
+          href="https://rudrik.io"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="sidebar-website-link"
+          style={{
+            display: "block",
+            fontSize: "9px",
+            color: "#475569",
+            textAlign: "center",
+            marginTop: "4px",
+            textDecoration: "none",
+            transition: "color 0.2s ease",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#2563eb"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "#475569"; }}
+        >
+          www.rudrik.io
+        </a>
       </div>
     </div>
   );

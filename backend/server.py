@@ -35,6 +35,11 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# Detect production environment (non-localhost MongoDB means production)
+IS_PRODUCTION = "localhost" not in mongo_url and "127.0.0.1" not in mongo_url
+COOKIE_SECURE = IS_PRODUCTION
+COOKIE_SAMESITE = "none" if IS_PRODUCTION else "lax"
+
 # Create the main app
 app = FastAPI(title="Rudrik API")
 api_router = APIRouter(prefix="/api")
@@ -106,48 +111,50 @@ async def create_default_tenant(db):
     return tenant_id
 
 async def create_admin_user(db, tenant_id):
-    """Create or update admin user"""
-    # Create primary admin from environment variables
+    """Create or update admin user — idempotent and migration-safe"""
     sentrix_email = os.environ.get("SENTRIX_ADMIN_EMAIL", "shyam@rudrik.io")
     sentrix_password = os.environ.get("SENTRIX_ADMIN_PASSWORD", "Assword@0231")
     
-    # Migrate old shyam@sentrixai.com → new email if it exists
-    old_user = await db.users.find_one({"email": "shyam@sentrixai.com"})
-    if old_user and sentrix_email != "shyam@sentrixai.com":
-        await db.users.update_one(
-            {"email": "shyam@sentrixai.com"},
-            {"$set": {
-                "email": sentrix_email,
-                "password_hash": hash_password(sentrix_password),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }}
-        )
-        logger.info(f"Migrated admin user: shyam@sentrixai.com → {sentrix_email}")
-    else:
-        sentrix_user = await db.users.find_one({"email": sentrix_email})
-        if sentrix_user is None:
-            hashed = hash_password(sentrix_password)
-            user_doc = {
-                "_id": ObjectId(),
-                "id": str(uuid.uuid4()),
-                "email": sentrix_email,
-                "password_hash": hashed,
-                "name": "Shyam - Super Admin",
-                "role": "super_admin",
-                "tenant_id": tenant_id,
-                "totp_enabled": False,
-                "is_active": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }
-            await db.users.insert_one(user_doc)
-            logger.info(f"Primary admin user created: {sentrix_email}")
-        elif not verify_password(sentrix_password, sentrix_user["password_hash"]):
+    # Migrate old shyam@sentrixai.com → new email if old exists and new email differs
+    if sentrix_email != "shyam@sentrixai.com":
+        old_user = await db.users.find_one({"email": "shyam@sentrixai.com"})
+        if old_user:
+            # Delete any existing user at target email to avoid duplicate key
+            await db.users.delete_one({"email": sentrix_email})
             await db.users.update_one(
-                {"email": sentrix_email},
-                {"$set": {"password_hash": hash_password(sentrix_password)}}
+                {"email": "shyam@sentrixai.com"},
+                {"$set": {
+                    "email": sentrix_email,
+                    "password_hash": hash_password(sentrix_password),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }}
             )
-            logger.info(f"Primary admin password updated: {sentrix_email}")
+            logger.info(f"Migrated admin user: shyam@sentrixai.com -> {sentrix_email}")
+    
+    # Ensure primary admin exists with correct password
+    sentrix_user = await db.users.find_one({"email": sentrix_email})
+    if sentrix_user is None:
+        user_doc = {
+            "_id": ObjectId(),
+            "id": str(uuid.uuid4()),
+            "email": sentrix_email,
+            "password_hash": hash_password(sentrix_password),
+            "name": "Shyam - Super Admin",
+            "role": "super_admin",
+            "tenant_id": tenant_id,
+            "totp_enabled": False,
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.users.insert_one(user_doc)
+        logger.info(f"Primary admin user created: {sentrix_email}")
+    elif not verify_password(sentrix_password, sentrix_user["password_hash"]):
+        await db.users.update_one(
+            {"email": sentrix_email},
+            {"$set": {"password_hash": hash_password(sentrix_password)}}
+        )
+        logger.info(f"Primary admin password updated: {sentrix_email}")
     
     # Create default admin@rudrik.io admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@rudrik.io")
@@ -155,12 +162,11 @@ async def create_admin_user(db, tenant_id):
     
     existing = await db.users.find_one({"email": admin_email})
     if existing is None:
-        hashed = hash_password(admin_password)
         user_doc = {
             "_id": ObjectId(),
             "id": str(uuid.uuid4()),
             "email": admin_email,
-            "password_hash": hashed,
+            "password_hash": hash_password(admin_password),
             "name": "Super Admin",
             "role": "super_admin",
             "tenant_id": tenant_id,
@@ -1030,8 +1036,8 @@ async def login(req: LoginRequest, response: Response):
     access_token = create_access_token(str(user["_id"]), email, user["tenant_id"])
     refresh_token = create_refresh_token(str(user["_id"]))
     
-    response.set_cookie("access_token", access_token, httponly=True, secure=False, samesite="lax", max_age=900)
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800)
+    response.set_cookie("access_token", access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=900)
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800)
     
     user["_id"] = str(user["_id"])
     user.pop("password_hash")
@@ -1058,8 +1064,8 @@ async def verify_2fa(req: TOTPVerifyRequest, temp_token: str, response: Response
             access_token = create_access_token(str(user["_id"]), user["email"], user["tenant_id"])
             refresh_token = create_refresh_token(str(user["_id"]))
             
-            response.set_cookie("access_token", access_token, httponly=True, secure=False, samesite="lax", max_age=900)
-            response.set_cookie("refresh_token", refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800)
+            response.set_cookie("access_token", access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=900)
+            response.set_cookie("refresh_token", refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800)
             
             user["_id"] = str(user["_id"])
             user.pop("password_hash")
@@ -1083,8 +1089,8 @@ async def get_me(request: Request):
 
 @api_router.post("/auth/logout")
 async def logout(response: Response):
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+    response.delete_cookie("access_token", secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE)
+    response.delete_cookie("refresh_token", secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE)
     return {"message": "Logged out successfully"}
 
 @api_router.post("/auth/2fa/setup/initiate")

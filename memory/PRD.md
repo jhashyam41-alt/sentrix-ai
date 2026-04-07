@@ -47,8 +47,8 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
 - P2: Public self-service onboarding portal
 
 ## Test Credentials
-- Primary: shyam@sentrixai.com / Sentrix@2024 (super_admin)
-- Default: admin@rudrik.io / Rudrik2026!@# (super_admin)
+- Primary: shyam@rudrik.io / MySecure@2026! (super_admin)
+- Default: admin@rudrik.io / Admin123!@# (super_admin)
 
 ## Known Items
 - Settings company_name in DB may show "AMLGuard Demo" if not reset (seed only runs if no existing settings doc)

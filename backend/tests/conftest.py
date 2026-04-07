@@ -9,8 +9,8 @@ import os
 import pytest
 import requests
 
-TEST_EMAIL: str = os.environ.get("TEST_ADMIN_EMAIL", "shyam@sentrixai.com")
-TEST_PASSWORD: str = os.environ.get("TEST_ADMIN_PASSWORD", "Sentrix@2024")
+TEST_EMAIL: str = os.environ.get("TEST_ADMIN_EMAIL", "shyam@rudrik.io")
+TEST_PASSWORD: str = os.environ.get("TEST_ADMIN_PASSWORD", "MySecure@2026!")
 BASE_URL: str = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
 

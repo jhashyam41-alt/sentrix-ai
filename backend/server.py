@@ -107,28 +107,47 @@ async def create_default_tenant(db):
 
 async def create_admin_user(db, tenant_id):
     """Create or update admin user"""
-    # Create shyam@sentrixai.com admin from environment variables
-    sentrix_email = os.environ.get("SENTRIX_ADMIN_EMAIL", "shyam@sentrixai.com")
-    sentrix_password = os.environ.get("SENTRIX_ADMIN_PASSWORD", "Sentrix@2024")
+    # Create primary admin from environment variables
+    sentrix_email = os.environ.get("SENTRIX_ADMIN_EMAIL", "shyam@rudrik.io")
+    sentrix_password = os.environ.get("SENTRIX_ADMIN_PASSWORD", "MySecure@2026!")
     
-    sentrix_user = await db.users.find_one({"email": sentrix_email})
-    if sentrix_user is None:
-        hashed = hash_password(sentrix_password)
-        user_doc = {
-            "_id": ObjectId(),
-            "id": str(uuid.uuid4()),
-            "email": sentrix_email,
-            "password_hash": hashed,
-            "name": "Shyam - Super Admin",
-            "role": "super_admin",
-            "tenant_id": tenant_id,
-            "totp_enabled": False,
-            "is_active": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.users.insert_one(user_doc)
-        logger.info(f"Primary admin user created: {sentrix_email}")
+    # Migrate old shyam@sentrixai.com → new email if it exists
+    old_user = await db.users.find_one({"email": "shyam@sentrixai.com"})
+    if old_user and sentrix_email != "shyam@sentrixai.com":
+        await db.users.update_one(
+            {"email": "shyam@sentrixai.com"},
+            {"$set": {
+                "email": sentrix_email,
+                "password_hash": hash_password(sentrix_password),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }}
+        )
+        logger.info(f"Migrated admin user: shyam@sentrixai.com → {sentrix_email}")
+    else:
+        sentrix_user = await db.users.find_one({"email": sentrix_email})
+        if sentrix_user is None:
+            hashed = hash_password(sentrix_password)
+            user_doc = {
+                "_id": ObjectId(),
+                "id": str(uuid.uuid4()),
+                "email": sentrix_email,
+                "password_hash": hashed,
+                "name": "Shyam - Super Admin",
+                "role": "super_admin",
+                "tenant_id": tenant_id,
+                "totp_enabled": False,
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.users.insert_one(user_doc)
+            logger.info(f"Primary admin user created: {sentrix_email}")
+        elif not verify_password(sentrix_password, sentrix_user["password_hash"]):
+            await db.users.update_one(
+                {"email": sentrix_email},
+                {"$set": {"password_hash": hash_password(sentrix_password)}}
+            )
+            logger.info(f"Primary admin password updated: {sentrix_email}")
     
     # Create default admin@rudrik.io admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@rudrik.io")

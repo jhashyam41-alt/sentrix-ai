@@ -109,7 +109,7 @@ async def create_admin_user(db, tenant_id):
     """Create or update admin user"""
     # Create primary admin from environment variables
     sentrix_email = os.environ.get("SENTRIX_ADMIN_EMAIL", "shyam@rudrik.io")
-    sentrix_password = os.environ.get("SENTRIX_ADMIN_PASSWORD", "MySecure@2026!")
+    sentrix_password = os.environ.get("SENTRIX_ADMIN_PASSWORD", "Assword@0231")
     
     # Migrate old shyam@sentrixai.com → new email if it exists
     old_user = await db.users.find_one({"email": "shyam@sentrixai.com"})

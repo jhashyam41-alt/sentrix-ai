@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import logger from "../utils/logger";
-import { Plus, Search, Filter, X, Settings, Shield } from "lucide-react";
+import { Plus, Search, Filter, X, Settings, Shield, FileSpreadsheet } from "lucide-react";
 import { NewScreeningForm } from "../components/screening/NewScreeningForm";
 import { ScreeningProgress } from "../components/screening/ScreeningProgress";
 import { ScreeningResultCard } from "../components/screening/ScreeningFinalResult";
 import { ScreeningHistoryTable } from "../components/screening/ScreeningHistoryTable";
+import { BulkScreeningPanel } from "../components/screening/BulkScreeningPanel";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const LS_KEY = "rudrik_sanctions_api_key";
@@ -49,6 +50,9 @@ export default function ScreeningHubPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [keyMsg, setKeyMsg] = useState("");
+
+  // Screening view tab
+  const [viewMode, setViewMode] = useState("individual");
 
   // Toast
   const [toast, setToast] = useState(null);
@@ -424,6 +428,47 @@ export default function ScreeningHubPage() {
         </div>
       )}
 
+      {/* Screening Mode Tabs */}
+      <div data-testid="screening-mode-tabs" style={{
+        display: "flex", gap: "4px", marginBottom: "20px",
+        background: "#0d1117", border: "1px solid #1e2530", borderRadius: "10px", padding: "4px",
+        maxWidth: "320px",
+      }}>
+        {[
+          { id: "individual", label: "Individual", icon: Search },
+          { id: "bulk", label: "Bulk Upload", icon: FileSpreadsheet },
+        ].map((tab) => {
+          const TabIcon = tab.icon;
+          const isActive = viewMode === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setViewMode(tab.id)}
+              data-testid={`tab-${tab.id}`}
+              style={{
+                flex: 1, padding: "8px 14px", borderRadius: "7px", border: "none",
+                background: isActive ? "rgba(37,99,235,0.12)" : "transparent",
+                color: isActive ? "#2563eb" : "#94a3b8",
+                fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                transition: "all 0.15s",
+              }}
+            >
+              <TabIcon style={{ width: "13px", height: "13px" }} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Bulk Screening Panel */}
+      {viewMode === "bulk" && (
+        <BulkScreeningPanel onScreeningComplete={() => fetchScreenings(1)} />
+      )}
+
+      {/* Individual Screening */}
+      {viewMode === "individual" && (
+        <>
       {/* Progress + Result area */}
       <ScreeningProgress checks={form.checks} isRunning={isRunning} isComplete={isComplete} />
 
@@ -487,6 +532,8 @@ export default function ScreeningHubPage() {
         onRescreen={handleRescreen}
         loading={historyLoading}
       />
+        </>
+      )}
 
       {/* New Screening Modal */}
       {showForm && (

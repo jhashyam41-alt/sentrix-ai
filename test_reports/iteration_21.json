@@ -1,0 +1,86 @@
+{
+  "summary": "Iteration 21: Bulk Screening Feature Testing Complete. All 23 backend tests passed (100%). All frontend features verified: Tab switcher, CSV template download, file upload, preview table, Screen All button, results table with Name/Match/Risk Score/Match Type/SLA columns, Download Excel button, and Batch History section.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard charts", "issues": ["Console warning about chart width/height being -1 - cosmetic issue, charts still render correctly (known from iteration 20)"]}
+    ]
+  },
+  "passed_tests": [
+    "GET /api/screenings/bulk/csv-template requires authentication (401)",
+    "POST /api/screenings/bulk/upload requires authentication (401)",
+    "GET /api/screenings/bulk/history requires authentication (401)",
+    "GET /api/screenings/bulk/csv-template returns 200 with text/csv content type",
+    "CSV template has correct headers: name, dob, nationality, id_type, id_number",
+    "CSV template has 3 Indian example rows with IN nationality",
+    "POST /api/screenings/bulk/upload accepts valid CSV and returns batch_id + total + preview",
+    "POST /api/screenings/bulk/upload rejects empty CSV with 400",
+    "POST /api/screenings/bulk/upload rejects CSV without 'name' column with 400",
+    "Upload preview contains parsed entity data with correct fields",
+    "POST /api/screenings/bulk/{batch_id}/run screens all entities and returns results",
+    "Screening results have required fields: full_name, has_match, risk_score, risk_level, sla_status",
+    "POST /api/screenings/bulk/{invalid_batch_id}/run returns 404",
+    "POST /api/screenings/bulk/{batch_id}/run on completed batch returns 400",
+    "GET /api/screenings/bulk/{batch_id}/progress returns screened_count and total_entities",
+    "GET /api/screenings/bulk/{invalid_batch_id}/progress returns 404",
+    "GET /api/screenings/bulk/{batch_id}/download returns .xlsx file with correct content type",
+    "GET /api/screenings/bulk/{invalid_batch_id}/download returns 404",
+    "GET /api/screenings/bulk/{batch_id}/download on incomplete batch returns 400",
+    "GET /api/screenings/bulk/history returns batches list",
+    "History batch items have required fields: batch_id, status, total_entities, created_at",
+    "History excludes entities and results arrays for performance",
+    "Completed batches in history show match_count",
+    "UI: Tab switcher (Individual/Bulk Upload) present and functional",
+    "UI: Bulk Upload tab shows upload dropzone with Choose File button",
+    "UI: Download CSV Template button works - downloads rudrik_screening_template.csv",
+    "UI: File upload shows preview table with entity count",
+    "UI: Screen All button runs screening",
+    "UI: Results table shows Name, Match (YES/NO), Risk Score, Match Type, SLA status columns",
+    "UI: Download Excel button triggers .xlsx download",
+    "UI: Batch History section shows completed batches with date, file, entities, matches, download link",
+    "UI: Individual tab still shows search filters and history table correctly"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_bulk_screening.py",
+    "/app/test_reports/pytest/bulk_screening_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Bulk screening uses demo mode (Sanctions.io mock data) - MOCKED as expected",
+    "Excel generation uses real openpyxl library - NOT MOCKED",
+    "CSV parsing correctly handles missing optional fields (dob, nationality, id_type, id_number)",
+    "SLA status computed dynamically based on screening duration vs configured target",
+    "Batch history correctly excludes large arrays (entities, results) for performance",
+    "Frontend correctly displays all bulk screening components with proper data-testid attributes"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bulk_screening.py (new - 23 test cases for bulk screening endpoints)"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23 tests passed)",
+    "frontend": "100% (all bulk screening features verified)"
+  },
+  "test_credentials": {
+    "primary_admin": {
+      "email": "shyam@rudrik.io",
+      "password": "Assword@0231",
+      "role": "super_admin"
+    }
+  },
+  "seed_data_creation": "None - test batches created during testing are stored in bulk_batches collection",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bulk Screening feature fully tested. Key data-testid attributes: screening-mode-tabs, tab-individual, tab-bulk, bulk-screening-panel, download-csv-template-btn, csv-file-input, csv-file-input-label, upload-csv-btn, run-bulk-screening-btn, bulk-progress-bar, bulk-results, download-results-btn, new-bulk-screening-btn, bulk-history-section, toggle-bulk-history, batch-{batch_id}, download-batch-{batch_id}. CSV template has headers: name,dob,nationality,id_type,id_number with 3 Indian example rows. Screening uses DEMO MODE (Sanctions.io mock data). Excel generation is REAL via openpyxl.",
+  "mocked_apis": {
+    "Sanctions.io Screening": "MOCKED - demo mode returns mock match data",
+    "SLA Metrics": "MOCKED - GET /api/sla-metrics returns deterministic mock data",
+    "SLA Breaches": "MOCKED - GET /api/sla-breaches returns hardcoded mock breach alerts",
+    "DigiLocker": "MOCKED (demo mode - no real API key configured)",
+    "Signzy KYC Verification": "MOCKED (demo mode)"
+  }
+}

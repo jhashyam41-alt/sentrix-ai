@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import io
 import logging
 from pathlib import Path
 from typing import Optional, List
@@ -3615,6 +3616,271 @@ async def run_screening(customer_id: str, request: Request):
     await log_audit(user["tenant_id"], user, "screening_run", "screening", customer_id, request=request)
     
     return {"message": "Screening completed", "results": screening_results}
+
+
+# ===================================
+# BULK SCREENING
+# ===================================
+
+@api_router.get("/screenings/bulk/csv-template")
+async def download_csv_template(request: Request):
+    """Download CSV template with example Indian entities."""
+    await get_current_user(request, db)
+    from services.bulk_screening_service import generate_csv_template
+    content = generate_csv_template()
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=rudrik_screening_template.csv"},
+    )
+
+
+@api_router.post("/screenings/bulk/upload")
+async def bulk_upload_csv(request: Request, file: UploadFile = File(...)):
+    """Upload and parse a CSV file, return preview of parsed entities."""
+    user = await get_current_user(request, db)
+    from services.bulk_screening_service import parse_csv
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    rows = parse_csv(text)
+    if not rows:
+        raise HTTPException(400, "No valid rows found. CSV must have a 'name' column header.")
+
+    batch_id = str(uuid.uuid4())
+    await db.bulk_batches.insert_one({
+        "batch_id": batch_id,
+        "tenant_id": user["tenant_id"],
+        "status": "uploaded",
+        "filename": file.filename,
+        "total_entities": len(rows),
+        "entities": rows,
+        "results": [],
+        "screened_count": 0,
+        "match_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": user["id"],
+        "created_by_name": user.get("name", user["email"]),
+        "mode": "pending",
+    })
+
+    return {"batch_id": batch_id, "total": len(rows), "preview": rows[:10]}
+
+
+@api_router.post("/screenings/bulk/{batch_id}/run")
+async def bulk_run_screening(batch_id: str, request: Request):
+    """Run screening on all entities in a batch. Returns SSE progress stream."""
+    user = await get_current_user(request, db)
+    batch = await db.bulk_batches.find_one(
+        {"batch_id": batch_id, "tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    )
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    if batch["status"] == "completed":
+        raise HTTPException(400, "Batch already screened")
+
+    entities = batch.get("entities", [])
+    if not entities:
+        raise HTTPException(400, "No entities in batch")
+
+    # Get screening API key
+    from services.sanctions_io_service import screen_entity, get_country_risk
+    tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+    sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
+    # Also check localStorage key passed in body
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    if body.get("api_key"):
+        sanctions_api_key = body["api_key"]
+
+    sla_config = (tenant_settings or {}).get("sla_config", {})
+    screening_target_hrs = sla_config.get("screening_target_hrs", 2)
+
+    results = []
+    for i, entity in enumerate(entities):
+        screen_start = datetime.now(timezone.utc)
+        screening_id = str(uuid.uuid4())
+
+        screening_data = await screen_entity(
+            entity["name"],
+            api_key=sanctions_api_key,
+            types=["sanction", "pep", "adverse-media"],
+            date_of_birth=entity.get("dob"),
+            nationality=entity.get("nationality"),
+        )
+
+        risk_score = 5
+        has_sanction = screening_data.get("has_sanction_match", False) if screening_data else False
+        has_pep = screening_data.get("has_pep_match", False) if screening_data else False
+        has_adverse = screening_data.get("has_adverse_media", False) if screening_data else False
+
+        sanctions_result = None
+        pep_result = None
+        adverse_media_result = None
+        matched_entities_list = []
+
+        if screening_data:
+            matches = screening_data.get("matches", [])
+            sanction_matches = [m for m in matches if m.get("match_type") == "sanction"]
+            pep_matches = [m for m in matches if m.get("match_type") == "pep"]
+            am_matches = [m for m in matches if m.get("match_type") in ("adverse-media", "criminal")]
+
+            sanctions_result = {"status": "match" if has_sanction else "clear", "matches": sanction_matches}
+            pep_result = {"status": "match" if has_pep else "clear", "matches": pep_matches}
+            adverse_media_result = {"status": "hits_found" if has_adverse else "clear", "hits": am_matches}
+
+            if has_sanction:
+                risk_score += 35
+                matched_entities_list.extend(sanction_matches)
+            if has_pep:
+                risk_score += 20
+                matched_entities_list.extend(pep_matches)
+            if has_adverse:
+                risk_score += 15
+
+        country_risk = get_country_risk(entity.get("nationality") or "")
+        if country_risk:
+            risk_score += 10
+
+        risk_score = min(risk_score, 100)
+        risk_level = "LOW" if risk_score <= 25 else "MEDIUM" if risk_score <= 50 else "HIGH" if risk_score <= 75 else "CRITICAL"
+
+        screen_end = datetime.now(timezone.utc)
+        elapsed_hrs = (screen_end - screen_start).total_seconds() / 3600
+        sla_status = "on_time" if elapsed_hrs <= screening_target_hrs * 0.8 else "at_risk" if elapsed_hrs <= screening_target_hrs else "breached"
+
+        screening_mode = screening_data.get("mode", "demo") if screening_data else "demo"
+        now_iso = screen_end.isoformat()
+
+        doc = {
+            "id": screening_id,
+            "tenant_id": user["tenant_id"],
+            "full_name": entity["name"],
+            "date_of_birth": entity.get("dob"),
+            "nationality": entity.get("nationality"),
+            "id_type": entity.get("id_type"),
+            "id_number": entity.get("id_number"),
+            "checks_run": ["sanctions", "pep", "adverse_media"],
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "status": "flagged" if risk_level in ("HIGH", "CRITICAL") else "completed",
+            "sanctions_result": sanctions_result,
+            "pep_result": pep_result,
+            "adverse_media_result": adverse_media_result,
+            "country_risk": country_risk,
+            "matched_entities": matched_entities_list,
+            "created_at": now_iso,
+            "completed_at": now_iso,
+            "created_by": user["id"],
+            "mode": screening_mode,
+            "batch_id": batch_id,
+        }
+        await db.screening_records.insert_one(doc)
+        doc.pop("_id", None)
+
+        result_entry = {
+            "full_name": entity["name"],
+            "date_of_birth": entity.get("dob"),
+            "nationality": entity.get("nationality"),
+            "id_type": entity.get("id_type"),
+            "id_number": entity.get("id_number"),
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "has_match": has_sanction or has_pep or has_adverse,
+            "sanctions_match": has_sanction,
+            "pep_match": has_pep,
+            "adverse_media_match": has_adverse,
+            "sla_status": sla_status,
+            "screening_id": screening_id,
+        }
+        results.append(result_entry)
+
+        # Update batch progress
+        await db.bulk_batches.update_one(
+            {"batch_id": batch_id},
+            {"$set": {"screened_count": i + 1, "status": "running", "mode": screening_mode}}
+        )
+
+    # Finalize batch
+    match_count = sum(1 for r in results if r["has_match"])
+    await db.bulk_batches.update_one(
+        {"batch_id": batch_id},
+        {"$set": {
+            "status": "completed",
+            "results": results,
+            "match_count": match_count,
+            "screened_count": len(results),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    await log_audit(user["tenant_id"], user, "bulk_screening", "screening", batch_id,
+                   {"total": len(results), "matches": match_count}, request)
+
+    return {
+        "batch_id": batch_id,
+        "status": "completed",
+        "total": len(results),
+        "matches": match_count,
+        "results": results,
+    }
+
+
+@api_router.get("/screenings/bulk/{batch_id}/progress")
+async def bulk_screening_progress(batch_id: str, request: Request):
+    """Get progress of a running bulk screening batch."""
+    user = await get_current_user(request, db)
+    batch = await db.bulk_batches.find_one(
+        {"batch_id": batch_id, "tenant_id": user["tenant_id"]},
+        {"_id": 0, "status": 1, "screened_count": 1, "total_entities": 1, "match_count": 1, "results": 1}
+    )
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    return batch
+
+
+@api_router.get("/screenings/bulk/{batch_id}/download")
+async def download_bulk_results(batch_id: str, request: Request):
+    """Download bulk screening results as Excel."""
+    user = await get_current_user(request, db)
+    batch = await db.bulk_batches.find_one(
+        {"batch_id": batch_id, "tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    )
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    if batch["status"] != "completed":
+        raise HTTPException(400, "Batch not yet completed")
+
+    from services.bulk_screening_service import generate_results_excel
+    excel_bytes = generate_results_excel(batch, batch.get("results", []))
+
+    filename = f"rudrik_bulk_screening_{batch_id[:8]}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@api_router.get("/screenings/bulk/history")
+async def bulk_screening_history(request: Request):
+    """Get last 10 bulk screening batches."""
+    user = await get_current_user(request, db)
+    batches = await db.bulk_batches.find(
+        {"tenant_id": user["tenant_id"]},
+        {"_id": 0, "entities": 0, "results": 0}
+    ).sort("created_at", -1).limit(10).to_list(10)
+    return {"batches": batches}
+
 
 # Include routers
 app.include_router(api_router)

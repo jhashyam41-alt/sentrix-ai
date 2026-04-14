@@ -1256,6 +1256,19 @@ async def create_customer(data: dict, request: Request):
         "customer_data": data.get("customer_data", {})
     }
     
+    # Auto-flag FATF country risk
+    from services.fatf_service import classify_country
+    nationality = customer_doc["customer_data"].get("nationality")
+    fatf = classify_country(nationality)
+    customer_doc["country_risk"] = fatf
+    if fatf["level"] != "standard":
+        customer_doc["risk_score"] = min(customer_doc["risk_score"] + fatf["risk_score_impact"], 100)
+        if fatf["level"] == "black_list":
+            customer_doc["risk_level"] = "high"
+            customer_doc["cdd_tier"] = "edd"
+        elif fatf["level"] == "grey_list" and customer_doc["risk_level"] == "low":
+            customer_doc["risk_level"] = "medium"
+    
     await db.customers.insert_one(customer_doc)
     await db.tenants.update_one({"id": tenant_id}, {"$inc": {"customer_count": 1}})
     await log_audit(tenant_id, user, "customer_created", "customers", customer_id, request=request)
@@ -1310,6 +1323,15 @@ async def get_customer(customer_id: str, request: Request):
     
     if not customer:
         raise HTTPException(404, "Customer not found")
+    
+    # Always enrich with FATF classification
+    from services.fatf_service import classify_country
+    nationality = customer.get("customer_data", {}).get("nationality")
+    if nationality and not customer.get("country_risk", {}).get("level"):
+        fatf = classify_country(nationality)
+        customer["country_risk"] = fatf
+        # Persist for future reads
+        await db.customers.update_one({"id": customer_id}, {"$set": {"country_risk": fatf}})
     
     # Get related cases
     cases = await db.cases.find({"customer_id": customer_id, "tenant_id": user["tenant_id"]}, {"_id": 0}).to_list(100)
@@ -2024,6 +2046,58 @@ async def remove_sanctions_api_key(request: Request):
     await log_audit(user["tenant_id"], user, "sanctions_api_key_removed", "settings", None, {}, request)
     return {"status": "removed", "mode": "demo", "message": "API key removed. Screening now uses demo mode."}
 
+
+
+
+# ===================================
+# FATF COUNTRY RISK ROUTES
+# ===================================
+
+@api_router.get("/fatf/lists")
+async def get_fatf_lists(request: Request):
+    """Get current FATF Black List and Grey List countries."""
+    await get_current_user(request, db)
+    from services.fatf_service import get_all_lists
+    return get_all_lists()
+
+@api_router.get("/fatf/check/{country_code}")
+async def check_country_risk(country_code: str, request: Request):
+    """Check FATF risk classification for a country code."""
+    await get_current_user(request, db)
+    from services.fatf_service import classify_country
+    return classify_country(country_code)
+
+@api_router.post("/customers/{customer_id}/refresh-country-risk")
+async def refresh_customer_country_risk(customer_id: str, request: Request):
+    """Re-evaluate FATF country risk for a customer and update their risk score."""
+    user = await get_current_user(request, db)
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    from services.fatf_service import classify_country
+    nationality = customer.get("customer_data", {}).get("nationality")
+    fatf = classify_country(nationality)
+
+    updates = {"country_risk": fatf, "updated_at": datetime.now(timezone.utc).isoformat()}
+
+    # Adjust risk score based on FATF classification
+    old_impact = customer.get("country_risk", {}).get("risk_score_impact", 0)
+    score = customer.get("risk_score", 0) - old_impact + fatf["risk_score_impact"]
+    updates["risk_score"] = max(0, min(score, 100))
+
+    if fatf["level"] == "black_list":
+        updates["risk_level"] = "high"
+        updates["cdd_tier"] = "edd"
+    elif fatf["level"] == "grey_list":
+        if updates["risk_score"] <= 25:
+            updates["risk_level"] = "medium"
+
+    await db.customers.update_one({"id": customer_id}, {"$set": updates})
+    await log_audit(user["tenant_id"], user, "country_risk_refreshed", "customers", customer_id,
+                   {"nationality": nationality, "fatf_level": fatf["level"]}, request)
+
+    return {**fatf, "risk_score": updates["risk_score"]}
 
 
 # ===================================

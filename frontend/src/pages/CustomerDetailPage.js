@@ -4,7 +4,7 @@ import axios from "axios";
 import logger from "../utils/logger";
 import {
   ArrowLeft, User, Shield, AlertTriangle, CheckCircle, XCircle, Clock,
-  FileText, Send, Calendar, MapPin, Briefcase, Phone, Mail, BadgeCheck
+  FileText, Send, Calendar, MapPin, Briefcase, Phone, Mail, BadgeCheck, Flag
 } from "lucide-react";
 import { RiskScoreCircle, RiskLevelBadge } from "../components/screening/RiskScoreCircle";
 import { KYCVerificationCard } from "../components/customers/KYCVerificationCard";
@@ -172,6 +172,25 @@ export default function CustomerDetailPage() {
                   SANCTIONS MATCH
                 </span>
               )}
+              {/* FATF Country Risk Badge */}
+              {customer.country_risk?.level === "black_list" && (
+                <span data-testid="fatf-black-list-badge" className="flex items-center gap-1" style={{
+                  fontSize: "10px", fontWeight: 700, padding: "3px 10px", borderRadius: "5px",
+                  background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)",
+                  color: "#ef4444", letterSpacing: "0.3px",
+                }}>
+                  <Flag style={{ width: 11, height: 11 }} /> FATF BLACK LIST
+                </span>
+              )}
+              {customer.country_risk?.level === "grey_list" && (
+                <span data-testid="fatf-grey-list-badge" className="flex items-center gap-1" style={{
+                  fontSize: "10px", fontWeight: 700, padding: "3px 10px", borderRadius: "5px",
+                  background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)",
+                  color: "#f59e0b", letterSpacing: "0.3px",
+                }}>
+                  <Flag style={{ width: 11, height: 11 }} /> FATF GREY LIST
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3" style={{ fontSize: "12px", color: "#94a3b8" }}>
               {cd.nationality && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {cd.nationality}</span>}
@@ -180,6 +199,35 @@ export default function CustomerDetailPage() {
               {cd.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {cd.phone}</span>}
               {cd.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {cd.email}</span>}
             </div>
+            {/* FATF Country Risk Detail */}
+            {customer.country_risk?.level && customer.country_risk.level !== "standard" && (
+              <div data-testid="fatf-country-detail" style={{
+                marginTop: "10px", padding: "10px 14px", borderRadius: "8px",
+                background: customer.country_risk.level === "black_list" ? "rgba(239,68,68,0.06)" : "rgba(245,158,11,0.06)",
+                border: `1px solid ${customer.country_risk.level === "black_list" ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)"}`,
+              }}>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle style={{
+                    width: 13, height: 13,
+                    color: customer.country_risk.level === "black_list" ? "#ef4444" : "#f59e0b",
+                  }} />
+                  <span style={{
+                    fontSize: "12px", fontWeight: 700,
+                    color: customer.country_risk.level === "black_list" ? "#ef4444" : "#f59e0b",
+                  }}>
+                    {customer.country_risk.label || "FATF Flagged"}
+                  </span>
+                  <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "auto" }}>
+                    {customer.country_risk.country_name || cd.nationality} &mdash; +{customer.country_risk.risk_score_impact} risk pts
+                  </span>
+                </div>
+                <p style={{ fontSize: "11px", color: "#475569", marginTop: "4px" }}>
+                  {customer.country_risk.level === "black_list"
+                    ? "This customer\u2019s jurisdiction is subject to FATF Call for Action. Enhanced Due Diligence (EDD) is mandatory."
+                    : "This customer\u2019s jurisdiction is under FATF Increased Monitoring. Standard enhanced checks recommended."}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Risk Score Circle */}

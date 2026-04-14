@@ -193,9 +193,23 @@ export default function CustomersPage() {
                 >
                   {/* Name */}
                   <div>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#f1f5f9" }}>{name}</div>
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#f1f5f9" }}>{name}</span>
+                      {c.country_risk?.level === "black_list" && (
+                        <span style={{
+                          fontSize: "8px", fontWeight: 800, padding: "1px 5px", borderRadius: "3px",
+                          background: "rgba(239,68,68,0.12)", color: "#ef4444", letterSpacing: "0.3px",
+                        }}>BL</span>
+                      )}
+                      {c.country_risk?.level === "grey_list" && (
+                        <span style={{
+                          fontSize: "8px", fontWeight: 800, padding: "1px 5px", borderRadius: "3px",
+                          background: "rgba(245,158,11,0.12)", color: "#f59e0b", letterSpacing: "0.3px",
+                        }}>GL</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: "11px", color: "#475569" }}>
-                      {c.customer_data?.nationality || "—"} {c.customer_data?.occupation ? `• ${c.customer_data.occupation}` : ""}
+                      {c.customer_data?.nationality || "\u2014"} {c.customer_data?.occupation ? `\u2022 ${c.customer_data.occupation}` : ""}
                     </div>
                   </div>
 

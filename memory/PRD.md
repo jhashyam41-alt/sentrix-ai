@@ -56,6 +56,15 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Yellow "PARTIALLY VERIFIED" badge when only one verified
   - Timeline events created for each verification
   - Overall kyc_status auto-updates to "verified" when both pass
+- Phase 15: FATF Country Risk Flagging (Apr 2026)
+  - New `services/fatf_service.py` — Black List (KP, IR, MM) + Grey List (25 countries) classification
+  - Endpoints: GET /api/fatf/lists, GET /api/fatf/check/{code}, POST /api/customers/{id}/refresh-country-risk
+  - Auto-flag on customer creation: nationality checked against FATF lists
+  - Black list: auto EDD, +25 risk pts, risk_level=high
+  - Grey list: +10 risk pts, risk_level=medium
+  - Lazy enrichment on GET /api/customers/{id} for existing customers
+  - Customer detail: FATF badge (red/amber), warning banner with description, +risk pts
+  - Customer list: BL/GL mini badges next to names
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports

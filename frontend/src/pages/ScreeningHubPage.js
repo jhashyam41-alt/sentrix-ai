@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import logger from "../utils/logger";
-import { Plus, Search, Filter, X } from "lucide-react";
+import { Plus, Search, Filter, X, Key, CheckCircle, AlertTriangle, Shield } from "lucide-react";
 import { NewScreeningForm } from "../components/screening/NewScreeningForm";
 import { ScreeningProgress } from "../components/screening/ScreeningProgress";
 import { ScreeningResultCard } from "../components/screening/ScreeningFinalResult";
@@ -16,7 +16,7 @@ const INITIAL_FORM = {
   nationality: "IN",
   idType: "",
   idNumber: "",
-  checks: ["sanctions", "pep"],
+  checks: ["sanctions", "pep", "adverse_media"],
 };
 
 export default function ScreeningHubPage() {
@@ -41,6 +41,52 @@ export default function ScreeningHubPage() {
 
   // View detail state
   const [viewDetail, setViewDetail] = useState(null);
+
+  // API Key state
+  const [screeningMode, setScreeningMode] = useState("demo");
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [apiKeyMsg, setApiKeyMsg] = useState("");
+
+  // Fetch screening status on mount
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const { data } = await axios.get(`${API}/settings/screening-status`, { withCredentials: true });
+        setScreeningMode(data?.sanctions_io?.mode === "live" ? "live" : "demo");
+      } catch { /* ignore */ }
+    };
+    fetchStatus();
+  }, []);
+
+  const handleSaveApiKey = async () => {
+    if (!apiKeyInput.trim()) return;
+    setSavingKey(true);
+    setApiKeyMsg("");
+    try {
+      const { data } = await axios.post(`${API}/settings/sanctions-api-key`, { api_key: apiKeyInput.trim() }, { withCredentials: true });
+      setScreeningMode(data.mode);
+      setApiKeyMsg(data.message);
+      setApiKeyInput("");
+      setTimeout(() => { setShowApiKeyInput(false); setApiKeyMsg(""); }, 2000);
+    } catch (err) {
+      setApiKeyMsg(err.response?.data?.detail || "Failed to save key");
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const handleRemoveApiKey = async () => {
+    try {
+      const { data } = await axios.delete(`${API}/settings/sanctions-api-key`, { withCredentials: true });
+      setScreeningMode(data.mode);
+      setApiKeyMsg("Switched to demo mode");
+      setTimeout(() => setApiKeyMsg(""), 2000);
+    } catch (err) {
+      setApiKeyMsg("Failed to remove key");
+    }
+  };
 
   const fetchScreenings = useCallback(async (p = 1) => {
     setHistoryLoading(true);
@@ -144,22 +190,139 @@ export default function ScreeningHubPage() {
 
   return (
     <div data-testid="screening-hub-page">
+      {/* Demo Mode Banner */}
+      {screeningMode === "demo" && (
+        <div data-testid="demo-mode-banner" style={{
+          background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.25)",
+          borderRadius: "8px", padding: "10px 16px", marginBottom: "16px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div className="flex items-center gap-2">
+            <AlertTriangle style={{ width: 14, height: 14, color: "#f59e0b" }} />
+            <span style={{ fontSize: "12px", color: "#fbbf24", fontWeight: 600 }}>Demo Mode</span>
+            <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+              — Add your Sanctions.io API key for live screening against 75+ sanctions lists
+            </span>
+          </div>
+          <button onClick={() => setShowApiKeyInput(true)} data-testid="add-api-key-btn"
+            style={{
+              fontSize: "11px", padding: "4px 12px", borderRadius: "6px",
+              background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.3)",
+              color: "#fbbf24", cursor: "pointer", fontWeight: 600,
+            }}>
+            <Key style={{ width: 12, height: 12, display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+            Add API Key
+          </button>
+        </div>
+      )}
+
+      {/* API Key Input Panel */}
+      {showApiKeyInput && (
+        <div data-testid="api-key-panel" style={{
+          background: "#0d1117", border: "1px solid #1e2530", borderRadius: "8px",
+          padding: "16px", marginBottom: "16px",
+        }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Shield style={{ width: 16, height: 16, color: "#2563eb" }} />
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9" }}>Sanctions.io API Key</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="Enter your Sanctions.io API key..."
+              data-testid="api-key-input"
+              onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
+              style={{
+                flex: 1, padding: "8px 12px", borderRadius: "6px",
+                background: "#080c12", border: "1px solid #1e2530", color: "#f1f5f9",
+                fontSize: "13px", outline: "none",
+              }}
+            />
+            <button onClick={handleSaveApiKey} disabled={savingKey || !apiKeyInput.trim()}
+              data-testid="save-api-key-btn"
+              style={{
+                padding: "8px 20px", borderRadius: "6px", fontSize: "12px", fontWeight: 600,
+                background: savingKey ? "#1e2530" : "#2563eb", color: "#fff",
+                border: "none", cursor: savingKey ? "wait" : "pointer",
+              }}>
+              {savingKey ? "Validating..." : "Save & Activate"}
+            </button>
+            <button onClick={() => { setShowApiKeyInput(false); setApiKeyMsg(""); }}
+              style={{ background: "transparent", border: "none", cursor: "pointer", color: "#475569", padding: "4px" }}>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {apiKeyMsg && (
+            <p style={{ fontSize: "12px", color: apiKeyMsg.includes("validated") || apiKeyMsg.includes("saved") ? "#10b981" : "#f59e0b", marginTop: "8px" }}>
+              {apiKeyMsg}
+            </p>
+          )}
+          <p style={{ fontSize: "11px", color: "#475569", marginTop: "8px" }}>
+            Get your API key from <a href="https://sanctions.io" target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>sanctions.io</a> — Covers 75+ sanctions lists, 1M+ PEP records, adverse media &amp; criminal watchlists.
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "#f1f5f9", marginBottom: "4px" }}
-              data-testid="screening-hub-title">
-            Screening
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "#f1f5f9", marginBottom: "4px" }}
+                data-testid="screening-hub-title">
+              Screening
+            </h1>
+            {/* Live/Demo Status Dot */}
+            <div data-testid="screening-mode-indicator" className="flex items-center gap-1.5" style={{
+              padding: "3px 10px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
+              background: screeningMode === "live" ? "rgba(16,185,129,0.1)" : "rgba(245,158,11,0.1)",
+              border: `1px solid ${screeningMode === "live" ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}`,
+              color: screeningMode === "live" ? "#10b981" : "#f59e0b",
+              textTransform: "uppercase", letterSpacing: "0.5px",
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: screeningMode === "live" ? "#10b981" : "#f59e0b",
+                display: "inline-block",
+              }} />
+              {screeningMode === "live" ? "Live API" : "Demo Mode"}
+            </div>
+          </div>
           <p style={{ color: "#94a3b8", fontSize: "14px" }}>
-            Run sanctions, PEP, adverse media &amp; KYC screenings
+            {screeningMode === "live"
+              ? "Screening against 75+ sanctions lists, 1M+ PEP records, adverse media & criminal watchlists via Sanctions.io"
+              : "Run sanctions, PEP, adverse media & KYC screenings"}
           </p>
         </div>
-        <button onClick={() => { setShowForm(true); setLatestResult(null); setIsComplete(false); }}
-          className="btn-primary" data-testid="new-screening-btn"
-          style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Plus className="w-4 h-4" /> New Screening
-        </button>
+        <div className="flex items-center gap-2">
+          {screeningMode === "live" && (
+            <button onClick={handleRemoveApiKey} data-testid="disconnect-api-btn"
+              style={{
+                padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
+                border: "1px solid #1e2530", background: "transparent", color: "#94a3b8",
+                cursor: "pointer",
+              }}>
+              Disconnect API
+            </button>
+          )}
+          {screeningMode === "demo" && !showApiKeyInput && (
+            <button onClick={() => setShowApiKeyInput(true)} data-testid="connect-api-btn"
+              style={{
+                padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
+                border: "1px solid rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.08)",
+                color: "#60a5fa", cursor: "pointer",
+              }}>
+              <Key style={{ width: 12, height: 12, display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+              Connect API
+            </button>
+          )}
+          <button onClick={() => { setShowForm(true); setLatestResult(null); setIsComplete(false); }}
+            className="btn-primary" data-testid="new-screening-btn"
+            style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Plus className="w-4 h-4" /> New Screening
+          </button>
+        </div>
       </div>
 
       {/* Progress + Result area */}

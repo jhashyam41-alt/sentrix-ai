@@ -1961,6 +1961,70 @@ async def remove_team_member(member_id: str, request: Request):
     return {"message": "Member removed"}
 
 
+
+# ===================================
+# SANCTIONS.IO API KEY MANAGEMENT
+# ===================================
+
+@api_router.get("/settings/screening-status")
+async def get_screening_status(request: Request):
+    """Get the current screening provider status (live vs demo)."""
+    user = await get_current_user(request, db)
+    tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+    api_key = (tenant_settings or {}).get("sanctions_io_api_key")
+    from services.sanctions_io_service import get_service_status
+    return get_service_status(api_key)
+
+@api_router.post("/settings/sanctions-api-key")
+async def save_sanctions_api_key(data: dict, request: Request):
+    """Save and validate a Sanctions.io API key for the tenant."""
+    user = await get_current_user(request, db)
+    if user["role"] not in ("super_admin", "compliance_officer"):
+        raise HTTPException(403, "Only admins and compliance officers can manage API keys")
+
+    api_key = data.get("api_key", "").strip()
+    if not api_key:
+        # Remove key
+        await db.settings.update_one(
+            {"tenant_id": user["tenant_id"]},
+            {"$unset": {"sanctions_io_api_key": ""}},
+        )
+        await log_audit(user["tenant_id"], user, "sanctions_api_key_removed", "settings", None, {}, request)
+        return {"status": "removed", "mode": "demo", "message": "API key removed. Screening now uses demo mode."}
+
+    # Validate the key
+    from services.sanctions_io_service import validate_api_key
+    validation = await validate_api_key(api_key)
+
+    if not validation["valid"]:
+        raise HTTPException(400, validation["message"])
+
+    # Save the key
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {"sanctions_io_api_key": api_key}},
+        upsert=True,
+    )
+    await log_audit(user["tenant_id"], user, "sanctions_api_key_saved", "settings", None,
+                   {"provider": "sanctions.io"}, request)
+
+    return {"status": "saved", "mode": "live", "message": "Sanctions.io API key validated and saved. Live screening enabled."}
+
+@api_router.delete("/settings/sanctions-api-key")
+async def remove_sanctions_api_key(request: Request):
+    """Remove the Sanctions.io API key for the tenant."""
+    user = await get_current_user(request, db)
+    if user["role"] not in ("super_admin", "compliance_officer"):
+        raise HTTPException(403, "Only admins and compliance officers can manage API keys")
+
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$unset": {"sanctions_io_api_key": ""}},
+    )
+    await log_audit(user["tenant_id"], user, "sanctions_api_key_removed", "settings", None, {}, request)
+    return {"status": "removed", "mode": "demo", "message": "API key removed. Screening now uses demo mode."}
+
+
 # ===================================
 # CASE MANAGEMENT ROUTES
 # ===================================
@@ -2805,15 +2869,31 @@ async def run_full_screening(data: dict, request: Request):
             if kyc_result.get("status") == "failed":
                 risk_score += 20
 
-    # Step 2 & 3: Sanctions + PEP
+    # Step 2 & 3 & 4: Sanctions + PEP + Adverse Media via Sanctions.io
+    from services.sanctions_io_service import screen_entity, get_country_risk
+    
+    # Get tenant API key
+    tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+    sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
+    
+    screening_types = []
+    if "sanctions" in checks:
+        screening_types.append("sanction")
+    if "pep" in checks:
+        screening_types.append("pep")
+    if "adverse_media" in checks:
+        screening_types.append("adverse-media")
+    
     screening_data = None
-    if "sanctions" in checks or "pep" in checks:
-        from services.opensanctions_service import screen_individual as svc_screen
-        screening_data = await svc_screen(full_name, dob, nationality)
+    if screening_types:
+        screening_data = await screen_entity(
+            full_name, api_key=sanctions_api_key,
+            types=screening_types, date_of_birth=dob, nationality=nationality,
+        )
 
     if "sanctions" in checks:
         has_sanction = screening_data.get("has_sanction_match", False) if screening_data else False
-        sanction_matches = [m for m in screening_data.get("matches", []) if "sanction" in m.get("topics", [])] if screening_data else []
+        sanction_matches = [m for m in screening_data.get("matches", []) if m.get("match_type") == "sanction"] if screening_data else []
         sanctions_result = {"status": "match" if has_sanction else "clear", "matches": sanction_matches}
         if has_sanction:
             risk_score += 35
@@ -2821,27 +2901,23 @@ async def run_full_screening(data: dict, request: Request):
 
     if "pep" in checks:
         has_pep = screening_data.get("has_pep_match", False) if screening_data else False
-        pep_matches = [m for m in screening_data.get("matches", []) if "role.pep" in m.get("topics", [])] if screening_data else []
+        pep_matches = [m for m in screening_data.get("matches", []) if m.get("match_type") == "pep"] if screening_data else []
         pep_result = {"status": "match" if has_pep else "clear", "matches": pep_matches}
         if has_pep:
             risk_score += 20
             matched_entities.extend(pep_matches)
 
-    # Step 4: Adverse media
     if "adverse_media" in checks:
-        from services.screening_service import screening_service
-        am_data = {"full_name": full_name, "nationality": nationality}
-        am_result = await screening_service.screen_adverse_media(am_data)
-        has_hits = am_result.get("has_hits", False)
+        has_adverse = screening_data.get("has_adverse_media", False) if screening_data else False
+        am_matches = [m for m in screening_data.get("matches", []) if m.get("match_type") in ("adverse-media", "criminal")] if screening_data else []
         adverse_media_result = {
-            "status": "hits_found" if has_hits else "clear",
-            "hits": am_result.get("hits", []),
+            "status": "hits_found" if has_adverse else "clear",
+            "hits": am_matches,
         }
-        if has_hits:
+        if has_adverse:
             risk_score += 15
 
     # Country risk
-    from services.opensanctions_service import get_country_risk
     country_risk = get_country_risk(nationality)
     if country_risk:
         risk_score += 10
@@ -2856,6 +2932,7 @@ async def run_full_screening(data: dict, request: Request):
     else:
         risk_level = "CRITICAL"
 
+    screening_mode = screening_data.get("mode", "demo") if screening_data else "demo"
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "id": screening_id,
@@ -2878,14 +2955,15 @@ async def run_full_screening(data: dict, request: Request):
         "created_at": now,
         "completed_at": now,
         "created_by": user["id"],
-        "mode": "demo",
+        "mode": screening_mode,
+        "provider": screening_data.get("provider", "demo") if screening_data else "demo",
     }
 
     await db.screening_records.insert_one(doc)
     doc.pop("_id", None)
 
     await log_audit(user["tenant_id"], user, "screening_run", "screening", screening_id,
-                   {"full_name": full_name, "checks": checks, "risk_level": risk_level}, request)
+                   {"full_name": full_name, "checks": checks, "risk_level": risk_level, "mode": screening_mode}, request)
 
     return doc
 
@@ -2929,25 +3007,39 @@ async def run_quick_screening(data: dict, request: Request):
         if kyc_fn:
             result["kyc"] = await kyc_fn()
 
-    # Sanctions + PEP
+    # Sanctions + PEP via Sanctions.io
     if "sanctions" in checks or "pep" in checks:
-        from services.opensanctions_service import screen_individual as svc_screen
-        screening = await svc_screen(name, dob, nationality)
+        from services.sanctions_io_service import screen_entity
+        
+        tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+        sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
+        
+        screening_types = []
+        if "sanctions" in checks:
+            screening_types.append("sanction")
+        if "pep" in checks:
+            screening_types.append("pep")
+        
+        screening = await screen_entity(
+            name, api_key=sanctions_api_key,
+            types=screening_types, date_of_birth=dob, nationality=nationality,
+        )
         if "sanctions" in checks:
             result["sanctions"] = {
                 "status": "match" if screening.get("has_sanction_match") else "clear",
-                "matches": [m for m in screening.get("matches", []) if "sanction" in m.get("topics", [])],
+                "matches": [m for m in screening.get("matches", []) if m.get("match_type") == "sanction"],
             }
         if "pep" in checks:
             result["pep"] = {
                 "status": "match" if screening.get("has_pep_match") else "clear",
-                "matches": [m for m in screening.get("matches", []) if "role.pep" in m.get("topics", [])],
+                "matches": [m for m in screening.get("matches", []) if m.get("match_type") == "pep"],
             }
         result["riskLevel"] = screening.get("risk_level", "LOW")
         result["riskScore"] = int(screening.get("top_score", 0) * 100)
+        result["mode"] = screening.get("mode", "demo")
+        result["provider"] = screening.get("provider", "demo")
 
     result["completedAt"] = datetime.now(timezone.utc).isoformat()
-    result["mode"] = "demo"
 
     await log_audit(user["tenant_id"], user, "quick_screening_run", "screening", None,
                    {"name": name, "checks": checks}, request)

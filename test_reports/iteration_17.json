@@ -1,0 +1,67 @@
+{
+  "summary": "Iteration 17: Sanctions.io API Key Modal UX Testing Complete. All new features working correctly: Gear icon opens modal with backdrop blur, password-type API key input, localStorage persistence, Live/Demo mode badges, toast notifications on API error with demo fallback. 19/19 backend tests passed, all UI flows verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Login with shyam@rudrik.io / Assword@0231",
+    "Screening page shows 'Demo Mode' yellow badge next to title",
+    "Gear/Settings icon visible in header area next to 'New Screening' button",
+    "Clicking gear icon opens API Key modal with backdrop blur",
+    "Modal shows: Demo Mode status, password input, Save & Activate button, sanctions.io link",
+    "Close button (X) dismisses the modal",
+    "Backdrop click dismisses the modal",
+    "POST /api/screenings/run without api_key returns demo mode results",
+    "POST /api/screenings/run with fake api_key falls back to demo with api_error field",
+    "GET /api/settings/screening-status returns demo mode",
+    "New Screening form opens with Sanctions, PEP, Adverse Media checked by default",
+    "Running a screening shows result card with provider badge (Demo Data)",
+    "Result card shows match type badges (PEP), match score %, list source, country",
+    "Toast notification appears on API error: 'API Error — falling back to demo mode'",
+    "Live badge (green) shows when API key is in localStorage",
+    "Dashboard loads correctly after screening",
+    "Sidebar Rudrik logo present",
+    "Footer www.rudrik.io link present",
+    "Screening history table shows check badges (SAN, PEP, AM)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_sanctions_io.py",
+    "/app/test_reports/pytest/sanctions_io_iteration17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "API key modal properly implements localStorage persistence with rudrik_sanctions_api_key key",
+    "Backend correctly accepts api_key in request body and falls back to demo mode on API error",
+    "api_error field properly returned when live API call fails",
+    "Toast notification system working correctly for API errors",
+    "Mode indicator correctly switches between Live (green) and Demo Mode (yellow)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sanctions_io.py (added 3 new tests for api_key in body feature)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 tests passed)",
+    "frontend": "100% (all UI flows verified)"
+  },
+  "test_credentials": {
+    "primary_admin": {
+      "email": "shyam@rudrik.io",
+      "password": "Assword@0231",
+      "role": "super_admin"
+    }
+  },
+  "seed_data_creation": "None - using existing demo data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sanctions.io API integration with gear icon modal fully tested. New features: (1) Gear icon opens modal instead of inline banner, (2) API key saved to localStorage + backend, (3) api_key passed in request body to /api/screenings/run, (4) api_error field returned on live API failure, (5) Toast notification on API error. All data-testid attributes working: screening-settings-btn, api-key-modal, api-key-input, save-api-key-btn, screening-mode-indicator, screening-provider-badge, screening-toast.",
+  "mocked_apis": {
+    "Sanctions.io": "MOCKED (demo mode - no real API key configured)",
+    "Signzy KYC Verification": "MOCKED (demo mode)"
+  }
+}

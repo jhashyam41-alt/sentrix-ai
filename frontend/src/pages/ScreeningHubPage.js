@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import logger from "../utils/logger";
-import { Plus, Search, Filter, X, Key, CheckCircle, AlertTriangle, Shield } from "lucide-react";
+import { Plus, Search, Filter, X, Settings, Shield } from "lucide-react";
 import { NewScreeningForm } from "../components/screening/NewScreeningForm";
 import { ScreeningProgress } from "../components/screening/ScreeningProgress";
 import { ScreeningResultCard } from "../components/screening/ScreeningFinalResult";
 import { ScreeningHistoryTable } from "../components/screening/ScreeningHistoryTable";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const LS_KEY = "rudrik_sanctions_api_key";
 
 const INITIAL_FORM = {
   fullName: "",
@@ -22,7 +23,7 @@ const INITIAL_FORM = {
 export default function ScreeningHubPage() {
   const navigate = useNavigate();
 
-  // Screening history state
+  // Screening history
   const [screenings, setScreenings] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -31,63 +32,92 @@ export default function ScreeningHubPage() {
   const [filterLevel, setFilterLevel] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
 
-  // New screening state
+  // New screening
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [latestResult, setLatestResult] = useState(null);
-
-  // View detail state
   const [viewDetail, setViewDetail] = useState(null);
 
-  // API Key state
-  const [screeningMode, setScreeningMode] = useState("demo");
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  // API Key + mode
+  const [screeningMode, setScreeningMode] = useState(() =>
+    localStorage.getItem(LS_KEY) ? "live" : "demo"
+  );
+  const [showKeyModal, setShowKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
-  const [apiKeyMsg, setApiKeyMsg] = useState("");
+  const [keyMsg, setKeyMsg] = useState("");
 
-  // Fetch screening status on mount
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const { data } = await axios.get(`${API}/settings/screening-status`, { withCredentials: true });
-        setScreeningMode(data?.sanctions_io?.mode === "live" ? "live" : "demo");
-      } catch { /* ignore */ }
-    };
-    fetchStatus();
+  // Toast
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((msg, type = "error") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const handleSaveApiKey = async () => {
-    if (!apiKeyInput.trim()) return;
+  // Check server-side key on mount too
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const { data } = await axios.get(`${API}/settings/screening-status`, { withCredentials: true });
+        const serverLive = data?.sanctions_io?.mode === "live";
+        const localKey = localStorage.getItem(LS_KEY);
+        setScreeningMode(serverLive || localKey ? "live" : "demo");
+      } catch { /* ignore */ }
+    };
+    check();
+  }, []);
+
+  // Save key — to localStorage + backend
+  const handleSaveKey = async () => {
+    const key = apiKeyInput.trim();
+    if (!key) return;
     setSavingKey(true);
-    setApiKeyMsg("");
+    setKeyMsg("");
     try {
-      const { data } = await axios.post(`${API}/settings/sanctions-api-key`, { api_key: apiKeyInput.trim() }, { withCredentials: true });
-      setScreeningMode(data.mode);
-      setApiKeyMsg(data.message);
+      // Save to backend (validates the key)
+      const { data } = await axios.post(
+        `${API}/settings/sanctions-api-key`,
+        { api_key: key },
+        { withCredentials: true }
+      );
+      localStorage.setItem(LS_KEY, key);
+      setScreeningMode("live");
+      setKeyMsg(data.message || "API key saved & activated");
       setApiKeyInput("");
-      setTimeout(() => { setShowApiKeyInput(false); setApiKeyMsg(""); }, 2000);
+      setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1500);
     } catch (err) {
-      setApiKeyMsg(err.response?.data?.detail || "Failed to save key");
+      // If backend validation fails, still save locally and try direct
+      const detail = err.response?.data?.detail || "";
+      if (err.response?.status === 400 && detail.includes("Invalid")) {
+        setKeyMsg("Invalid key — check your Sanctions.io dashboard");
+      } else {
+        // Network issue or non-401 — save locally, will attempt live on screening
+        localStorage.setItem(LS_KEY, key);
+        setScreeningMode("live");
+        setKeyMsg("Key saved locally. Will use it for screening.");
+        setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1500);
+      }
     } finally {
       setSavingKey(false);
     }
   };
 
-  const handleRemoveApiKey = async () => {
+  const handleRemoveKey = async () => {
+    localStorage.removeItem(LS_KEY);
+    setScreeningMode("demo");
+    setApiKeyInput("");
+    setKeyMsg("Switched to Demo Mode");
     try {
-      const { data } = await axios.delete(`${API}/settings/sanctions-api-key`, { withCredentials: true });
-      setScreeningMode(data.mode);
-      setApiKeyMsg("Switched to demo mode");
-      setTimeout(() => setApiKeyMsg(""), 2000);
-    } catch (err) {
-      setApiKeyMsg("Failed to remove key");
-    }
+      await axios.delete(`${API}/settings/sanctions-api-key`, { withCredentials: true });
+    } catch { /* ignore */ }
+    setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1200);
   };
 
+  // Fetch history
   const fetchScreenings = useCallback(async (p = 1) => {
     setHistoryLoading(true);
     try {
@@ -108,6 +138,7 @@ export default function ScreeningHubPage() {
 
   useEffect(() => { fetchScreenings(1); }, [fetchScreenings]);
 
+  // Run screening
   const handleSubmit = async () => {
     if (!form.fullName.trim() || form.checks.length === 0) return;
 
@@ -127,11 +158,21 @@ export default function ScreeningHubPage() {
         checks: form.checks,
       };
 
-      // Artificial delay so the progress animation plays out
+      // Pass localStorage API key to backend
+      const localKey = localStorage.getItem(LS_KEY);
+      if (localKey) {
+        payload.api_key = localKey;
+      }
+
       const [result] = await Promise.all([
         axios.post(`${API}/screenings/run`, payload, { withCredentials: true }).then((r) => r.data),
         new Promise((resolve) => setTimeout(resolve, (form.checks.length + 1) * 600 + 400)),
       ]);
+
+      // If the result came back as demo but we expected live, show toast
+      if (localKey && result.mode === "demo" && result.api_error) {
+        showToast("API Error — falling back to demo mode");
+      }
 
       setLatestResult(result);
       setIsComplete(true);
@@ -139,6 +180,7 @@ export default function ScreeningHubPage() {
       await fetchScreenings(1);
     } catch (err) {
       logger.error("Screening failed:", err);
+      showToast("Screening request failed — please try again");
       setIsComplete(true);
     } finally {
       setSubmitting(false);
@@ -153,7 +195,7 @@ export default function ScreeningHubPage() {
       nationality: s.nationality || "IN",
       idType: s.id_type || "",
       idNumber: s.id_number || "",
-      checks: s.checks_run || ["sanctions", "pep"],
+      checks: s.checks_run || ["sanctions", "pep", "adverse_media"],
     });
     setLatestResult(null);
     setIsComplete(false);
@@ -188,80 +230,26 @@ export default function ScreeningHubPage() {
     }
   };
 
+  const hasLocalKey = !!localStorage.getItem(LS_KEY);
+
   return (
     <div data-testid="screening-hub-page">
-      {/* Demo Mode Banner */}
-      {screeningMode === "demo" && (
-        <div data-testid="demo-mode-banner" style={{
-          background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.25)",
-          borderRadius: "8px", padding: "10px 16px", marginBottom: "16px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+      {/* Toast Notification */}
+      {toast && (
+        <div data-testid="screening-toast" style={{
+          position: "fixed", top: 20, right: 20, zIndex: 9999,
+          padding: "12px 20px", borderRadius: "8px",
+          background: toast.type === "error" ? "rgba(239,68,68,0.95)" : "rgba(16,185,129,0.95)",
+          color: "#fff", fontSize: "13px", fontWeight: 600,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          display: "flex", alignItems: "center", gap: "8px",
+          animation: "slideIn 0.3s ease",
         }}>
-          <div className="flex items-center gap-2">
-            <AlertTriangle style={{ width: 14, height: 14, color: "#f59e0b" }} />
-            <span style={{ fontSize: "12px", color: "#fbbf24", fontWeight: 600 }}>Demo Mode</span>
-            <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-              — Add your Sanctions.io API key for live screening against 75+ sanctions lists
-            </span>
-          </div>
-          <button onClick={() => setShowApiKeyInput(true)} data-testid="add-api-key-btn"
-            style={{
-              fontSize: "11px", padding: "4px 12px", borderRadius: "6px",
-              background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.3)",
-              color: "#fbbf24", cursor: "pointer", fontWeight: 600,
-            }}>
-            <Key style={{ width: 12, height: 12, display: "inline", marginRight: 4, verticalAlign: "middle" }} />
-            Add API Key
-          </button>
-        </div>
-      )}
-
-      {/* API Key Input Panel */}
-      {showApiKeyInput && (
-        <div data-testid="api-key-panel" style={{
-          background: "#0d1117", border: "1px solid #1e2530", borderRadius: "8px",
-          padding: "16px", marginBottom: "16px",
-        }}>
-          <div className="flex items-center gap-2 mb-3">
-            <Shield style={{ width: 16, height: 16, color: "#2563eb" }} />
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9" }}>Sanctions.io API Key</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="Enter your Sanctions.io API key..."
-              data-testid="api-key-input"
-              onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
-              style={{
-                flex: 1, padding: "8px 12px", borderRadius: "6px",
-                background: "#080c12", border: "1px solid #1e2530", color: "#f1f5f9",
-                fontSize: "13px", outline: "none",
-              }}
-            />
-            <button onClick={handleSaveApiKey} disabled={savingKey || !apiKeyInput.trim()}
-              data-testid="save-api-key-btn"
-              style={{
-                padding: "8px 20px", borderRadius: "6px", fontSize: "12px", fontWeight: 600,
-                background: savingKey ? "#1e2530" : "#2563eb", color: "#fff",
-                border: "none", cursor: savingKey ? "wait" : "pointer",
-              }}>
-              {savingKey ? "Validating..." : "Save & Activate"}
-            </button>
-            <button onClick={() => { setShowApiKeyInput(false); setApiKeyMsg(""); }}
-              style={{ background: "transparent", border: "none", cursor: "pointer", color: "#475569", padding: "4px" }}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {apiKeyMsg && (
-            <p style={{ fontSize: "12px", color: apiKeyMsg.includes("validated") || apiKeyMsg.includes("saved") ? "#10b981" : "#f59e0b", marginTop: "8px" }}>
-              {apiKeyMsg}
-            </p>
-          )}
-          <p style={{ fontSize: "11px", color: "#475569", marginTop: "8px" }}>
-            Get your API key from <a href="https://sanctions.io" target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>sanctions.io</a> — Covers 75+ sanctions lists, 1M+ PEP records, adverse media &amp; criminal watchlists.
-          </p>
+          {toast.type === "error" ? "!" : "\u2713"} {toast.msg}
+          <button onClick={() => setToast(null)} style={{
+            background: "transparent", border: "none", color: "#fff", cursor: "pointer",
+            marginLeft: "8px", fontSize: "16px", lineHeight: 1,
+          }}>&times;</button>
         </div>
       )}
 
@@ -269,11 +257,11 @@ export default function ScreeningHubPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-3">
-            <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "#f1f5f9", marginBottom: "4px" }}
+            <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "#f1f5f9" }}
                 data-testid="screening-hub-title">
               Screening
             </h1>
-            {/* Live/Demo Status Dot */}
+            {/* Live / Demo Mode Badge */}
             <div data-testid="screening-mode-indicator" className="flex items-center gap-1.5" style={{
               padding: "3px 10px", borderRadius: "99px", fontSize: "10px", fontWeight: 700,
               background: screeningMode === "live" ? "rgba(16,185,129,0.1)" : "rgba(245,158,11,0.1)",
@@ -286,37 +274,41 @@ export default function ScreeningHubPage() {
                 background: screeningMode === "live" ? "#10b981" : "#f59e0b",
                 display: "inline-block",
               }} />
-              {screeningMode === "live" ? "Live API" : "Demo Mode"}
+              {screeningMode === "live" ? "Live" : "Demo Mode"}
             </div>
           </div>
           <p style={{ color: "#94a3b8", fontSize: "14px" }}>
             {screeningMode === "live"
-              ? "Screening against 75+ sanctions lists, 1M+ PEP records, adverse media & criminal watchlists via Sanctions.io"
+              ? "Live screening via Sanctions.io \u2014 75+ sanctions lists, 1M+ PEP records, adverse media & criminal watchlists"
               : "Run sanctions, PEP, adverse media & KYC screenings"}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {screeningMode === "live" && (
-            <button onClick={handleRemoveApiKey} data-testid="disconnect-api-btn"
-              style={{
-                padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
-                border: "1px solid #1e2530", background: "transparent", color: "#94a3b8",
-                cursor: "pointer",
-              }}>
-              Disconnect API
-            </button>
-          )}
-          {screeningMode === "demo" && !showApiKeyInput && (
-            <button onClick={() => setShowApiKeyInput(true)} data-testid="connect-api-btn"
-              style={{
-                padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
-                border: "1px solid rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.08)",
-                color: "#60a5fa", cursor: "pointer",
-              }}>
-              <Key style={{ width: 12, height: 12, display: "inline", marginRight: 4, verticalAlign: "middle" }} />
-              Connect API
-            </button>
-          )}
+          {/* Gear Icon → API Key Modal */}
+          <button
+            onClick={() => { setShowKeyModal(true); setKeyMsg(""); }}
+            data-testid="screening-settings-btn"
+            title="API Key Settings"
+            style={{
+              width: 36, height: 36, borderRadius: "8px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "1px solid #1e2530", background: "transparent",
+              color: screeningMode === "live" ? "#10b981" : "#94a3b8",
+              cursor: "pointer", transition: "all 0.15s",
+              position: "relative",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#131923"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          >
+            <Settings style={{ width: 16, height: 16 }} />
+            {screeningMode === "live" && (
+              <span style={{
+                position: "absolute", top: -2, right: -2,
+                width: 8, height: 8, borderRadius: "50%",
+                background: "#10b981", border: "2px solid #080c12",
+              }} />
+            )}
+          </button>
           <button onClick={() => { setShowForm(true); setLatestResult(null); setIsComplete(false); }}
             className="btn-primary" data-testid="new-screening-btn"
             style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -324,6 +316,113 @@ export default function ScreeningHubPage() {
           </button>
         </div>
       </div>
+
+      {/* API Key Modal */}
+      {showKeyModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9000,
+          background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={(e) => { if (e.target === e.currentTarget) { setShowKeyModal(false); setKeyMsg(""); } }}>
+          <div data-testid="api-key-modal" style={{
+            width: "100%", maxWidth: 480, background: "#0d1117",
+            border: "1px solid #1e2530", borderRadius: "12px",
+            padding: "24px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+          }}>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Shield style={{ width: 18, height: 18, color: "#2563eb" }} />
+                <span style={{ fontSize: "15px", fontWeight: 700, color: "#f1f5f9" }}>Sanctions.io API Key</span>
+              </div>
+              <button onClick={() => { setShowKeyModal(false); setKeyMsg(""); }}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#475569" }}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current status */}
+            <div className="flex items-center gap-2 mb-4" style={{
+              padding: "10px 14px", borderRadius: "8px",
+              background: screeningMode === "live" ? "rgba(16,185,129,0.06)" : "rgba(245,158,11,0.06)",
+              border: `1px solid ${screeningMode === "live" ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)"}`,
+            }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: screeningMode === "live" ? "#10b981" : "#f59e0b",
+              }} />
+              <span style={{ fontSize: "12px", fontWeight: 600, color: screeningMode === "live" ? "#10b981" : "#f59e0b" }}>
+                {screeningMode === "live" ? "Live API Connected" : "Demo Mode"}
+              </span>
+              <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "auto" }}>
+                {screeningMode === "live" ? "75+ lists active" : "Using sample data"}
+              </span>
+            </div>
+
+            {/* API Key Input */}
+            <label style={{ fontSize: "12px", fontWeight: 600, color: "#94a3b8", marginBottom: "6px", display: "block" }}>
+              API Key
+            </label>
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={hasLocalKey ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (key saved)" : "Enter your Sanctions.io API key..."}
+              data-testid="api-key-input"
+              onKeyDown={(e) => e.key === "Enter" && handleSaveKey()}
+              style={{
+                width: "100%", padding: "10px 14px", borderRadius: "8px",
+                background: "#080c12", border: "1px solid #1e2530", color: "#f1f5f9",
+                fontSize: "13px", outline: "none", marginBottom: "12px",
+                boxSizing: "border-box",
+              }}
+            />
+
+            {keyMsg && (
+              <p data-testid="api-key-msg" style={{
+                fontSize: "12px", marginBottom: "12px",
+                color: keyMsg.includes("saved") || keyMsg.includes("activated") || keyMsg.includes("Switched")
+                  ? "#10b981" : "#f59e0b",
+              }}>
+                {keyMsg}
+              </p>
+            )}
+
+            {/* Buttons */}
+            <div className="flex items-center gap-2">
+              <button onClick={handleSaveKey} disabled={savingKey || !apiKeyInput.trim()}
+                data-testid="save-api-key-btn"
+                style={{
+                  flex: 1, padding: "10px", borderRadius: "8px", fontSize: "13px", fontWeight: 600,
+                  background: savingKey || !apiKeyInput.trim() ? "#1e2530" : "#2563eb",
+                  color: "#fff", border: "none",
+                  cursor: savingKey || !apiKeyInput.trim() ? "not-allowed" : "pointer",
+                  transition: "background 0.15s",
+                }}>
+                {savingKey ? "Validating..." : "Save & Activate"}
+              </button>
+              {hasLocalKey && (
+                <button onClick={handleRemoveKey} data-testid="remove-api-key-btn"
+                  style={{
+                    padding: "10px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600,
+                    border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)",
+                    color: "#ef4444", cursor: "pointer",
+                  }}>
+                  Remove Key
+                </button>
+              )}
+            </div>
+
+            <p style={{ fontSize: "11px", color: "#475569", marginTop: "14px", lineHeight: 1.5 }}>
+              Get your API key from{" "}
+              <a href="https://sanctions.io" target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
+                sanctions.io
+              </a>
+              {" "}&mdash; Covers 75+ sanctions lists, 1M+ PEP records, adverse media &amp; criminal watchlists.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Progress + Result area */}
       <ScreeningProgress checks={form.checks} isRunning={isRunning} isComplete={isComplete} />

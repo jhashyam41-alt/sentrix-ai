@@ -298,5 +298,93 @@ class TestScreeningHistory:
             assert screening["risk_level"] == "LOW"
 
 
+class TestScreeningWithApiKeyInBody:
+    """Tests for new feature: passing api_key in request body to /api/screenings/run."""
+    
+    def test_run_screening_without_api_key_returns_demo_mode(self, auth_headers):
+        """Test that screening without api_key in body returns demo mode results."""
+        response = requests.post(
+            f"{BASE_URL}/api/screenings/run",
+            headers=auth_headers,
+            json={
+                "fullName": "TEST_No_ApiKey",
+                "nationality": "US",
+                "checks": ["sanctions", "pep", "adverse_media"]
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should be in demo mode when no api_key provided
+        assert data["mode"] == "demo"
+        assert data["provider"] == "demo"
+        # Should NOT have api_error since we didn't try live mode
+        assert "api_error" not in data or data.get("api_error") is None
+    
+    def test_run_screening_with_fake_api_key_falls_back_to_demo(self, auth_headers):
+        """Test that screening with invalid api_key falls back to demo with api_error field."""
+        response = requests.post(
+            f"{BASE_URL}/api/screenings/run",
+            headers=auth_headers,
+            json={
+                "fullName": "TEST_Fake_ApiKey",
+                "nationality": "US",
+                "checks": ["sanctions", "pep"],
+                "api_key": "fake-invalid-api-key-12345"
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should fall back to demo mode
+        assert data["mode"] == "demo"
+        # Should have api_error field indicating the live call failed
+        assert "api_error" in data
+        assert data["api_error"] is not None
+        assert len(data["api_error"]) > 0
+        
+        # Should still return valid screening results (demo data)
+        assert "risk_score" in data
+        assert "risk_level" in data
+        assert "sanctions_result" in data
+    
+    def test_run_screening_with_api_key_returns_proper_structure(self, auth_headers):
+        """Test that screening with api_key returns proper response structure."""
+        response = requests.post(
+            f"{BASE_URL}/api/screenings/run",
+            headers=auth_headers,
+            json={
+                "fullName": "TEST_ApiKey_Structure",
+                "nationality": "IN",
+                "dateOfBirth": "1990-01-15",
+                "checks": ["sanctions", "pep", "adverse_media"],
+                "api_key": "test-key-for-structure"
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify all expected fields are present
+        assert "id" in data
+        assert "full_name" in data
+        assert "risk_score" in data
+        assert "risk_level" in data
+        assert "mode" in data
+        assert "provider" in data
+        assert "sanctions_result" in data
+        assert "pep_result" in data
+        assert "adverse_media_result" in data
+        assert "matched_entities" in data
+        assert "checks_run" in data
+        
+        # Verify checks were run
+        assert "sanctions" in data["checks_run"]
+        assert "pep" in data["checks_run"]
+        assert "adverse_media" in data["checks_run"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -2872,9 +2872,11 @@ async def run_full_screening(data: dict, request: Request):
     # Step 2 & 3 & 4: Sanctions + PEP + Adverse Media via Sanctions.io
     from services.sanctions_io_service import screen_entity, get_country_risk
     
-    # Get tenant API key
-    tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
-    sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
+    # Priority: request body api_key > tenant settings key
+    sanctions_api_key = data.get("api_key") or None
+    if not sanctions_api_key:
+        tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+        sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
     
     screening_types = []
     if "sanctions" in checks:
@@ -2959,6 +2961,10 @@ async def run_full_screening(data: dict, request: Request):
         "provider": screening_data.get("provider", "demo") if screening_data else "demo",
     }
 
+    # Include api_error if the live call failed and fell back to demo
+    if screening_data and screening_data.get("api_error"):
+        doc["api_error"] = screening_data["api_error"]
+
     await db.screening_records.insert_one(doc)
     doc.pop("_id", None)
 
@@ -3011,8 +3017,10 @@ async def run_quick_screening(data: dict, request: Request):
     if "sanctions" in checks or "pep" in checks:
         from services.sanctions_io_service import screen_entity
         
-        tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
-        sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
+        sanctions_api_key = data.get("api_key") or None
+        if not sanctions_api_key:
+            tenant_settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+            sanctions_api_key = (tenant_settings or {}).get("sanctions_io_api_key")
         
         screening_types = []
         if "sanctions" in checks:

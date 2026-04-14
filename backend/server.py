@@ -2025,6 +2025,177 @@ async def remove_sanctions_api_key(request: Request):
     return {"status": "removed", "mode": "demo", "message": "API key removed. Screening now uses demo mode."}
 
 
+
+# ===================================
+# DIGILOCKER VERIFICATION ROUTES
+# ===================================
+
+@api_router.post("/customers/{customer_id}/verify/aadhaar")
+async def verify_customer_aadhaar(customer_id: str, data: dict, request: Request):
+    """Verify customer's Aadhaar via DigiLocker."""
+    user = await get_current_user(request, db)
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    aadhaar_number = data.get("aadhaar_number", "").strip()
+    if not aadhaar_number or len(aadhaar_number) != 12 or not aadhaar_number.isdigit():
+        raise HTTPException(400, "Valid 12-digit Aadhaar number is required")
+
+    # Get API key from request body > tenant settings
+    api_key = data.get("api_key") or None
+    if not api_key:
+        settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+        api_key = (settings or {}).get("digilocker_api_key")
+
+    from services.digilocker_service import verify_aadhaar
+    result = await verify_aadhaar(aadhaar_number, customer.get("customer_data", {}).get("full_name", ""), api_key)
+
+    # Store verification in customer record
+    await db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {
+            "kyc_verifications.aadhaar": {
+                "status": result["status"],
+                "last4": result.get("aadhaar_last4"),
+                "holder_name": result.get("holder_name"),
+                "verified_at": result.get("verified_at"),
+                "mode": result.get("mode"),
+            },
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    # Update KYC status if both Aadhaar and PAN are verified
+    cust_updated = await db.customers.find_one({"id": customer_id})
+    verifications = cust_updated.get("kyc_verifications", {})
+    aadhaar_ok = verifications.get("aadhaar", {}).get("status") == "verified"
+    pan_ok = verifications.get("pan", {}).get("status") == "verified"
+    if aadhaar_ok and pan_ok:
+        await db.customers.update_one({"id": customer_id}, {"$set": {"kyc_status": "verified"}})
+
+    # Add timeline event
+    await db.customer_timeline.insert_one({
+        "id": str(uuid.uuid4()),
+        "tenant_id": user["tenant_id"],
+        "customer_id": customer_id,
+        "event_type": "kyc_verified" if result["status"] == "verified" else "kyc_failed",
+        "label": f"Aadhaar {'Verified' if result['status'] == 'verified' else 'Verification Failed'} (****{result.get('aadhaar_last4', '****')})",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await log_audit(user["tenant_id"], user, "aadhaar_verification", "customers", customer_id,
+                   {"status": result["status"], "mode": result.get("mode")}, request)
+
+    result.pop("api_error", None)
+    return result
+
+
+@api_router.post("/customers/{customer_id}/verify/pan")
+async def verify_customer_pan(customer_id: str, data: dict, request: Request):
+    """Verify customer's PAN card via DigiLocker."""
+    user = await get_current_user(request, db)
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    pan_number = data.get("pan_number", "").strip().upper()
+    if not pan_number or len(pan_number) != 10:
+        raise HTTPException(400, "Valid 10-character PAN number is required")
+
+    api_key = data.get("api_key") or None
+    if not api_key:
+        settings = await db.settings.find_one({"tenant_id": user["tenant_id"]})
+        api_key = (settings or {}).get("digilocker_api_key")
+
+    from services.digilocker_service import verify_pan
+    result = await verify_pan(pan_number, customer.get("customer_data", {}).get("full_name", ""), api_key)
+
+    # Store verification in customer record
+    await db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {
+            "kyc_verifications.pan": {
+                "status": result["status"],
+                "pan_number": result.get("pan_number"),
+                "holder_name": result.get("holder_name"),
+                "pan_type": result.get("pan_type"),
+                "name_match_score": result.get("name_match_score"),
+                "aadhaar_linked": result.get("aadhaar_linked"),
+                "verified_at": result.get("verified_at"),
+                "mode": result.get("mode"),
+            },
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    # Update KYC status if both Aadhaar and PAN are verified
+    cust_updated = await db.customers.find_one({"id": customer_id})
+    verifications = cust_updated.get("kyc_verifications", {})
+    aadhaar_ok = verifications.get("aadhaar", {}).get("status") == "verified"
+    pan_ok = verifications.get("pan", {}).get("status") == "verified"
+    if aadhaar_ok and pan_ok:
+        await db.customers.update_one({"id": customer_id}, {"$set": {"kyc_status": "verified"}})
+
+    # Add timeline event
+    await db.customer_timeline.insert_one({
+        "id": str(uuid.uuid4()),
+        "tenant_id": user["tenant_id"],
+        "customer_id": customer_id,
+        "event_type": "kyc_verified" if result["status"] == "verified" else "kyc_failed",
+        "label": f"PAN {'Verified' if result['status'] == 'verified' else 'Verification Failed'} ({result.get('pan_number', pan_number)})",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await log_audit(user["tenant_id"], user, "pan_verification", "customers", customer_id,
+                   {"status": result["status"], "pan_number": pan_number, "mode": result.get("mode")}, request)
+
+    result.pop("api_error", None)
+    return result
+
+
+@api_router.get("/customers/{customer_id}/verifications")
+async def get_customer_verifications(customer_id: str, request: Request):
+    """Get all verification statuses for a customer."""
+    user = await get_current_user(request, db)
+    customer = await db.customers.find_one({"id": customer_id, "tenant_id": user["tenant_id"]})
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    verifications = customer.get("kyc_verifications", {})
+    return {
+        "customer_id": customer_id,
+        "aadhaar": verifications.get("aadhaar", {"status": "not_verified"}),
+        "pan": verifications.get("pan", {"status": "not_verified"}),
+        "overall_kyc_status": customer.get("kyc_status", "pending"),
+    }
+
+
+@api_router.post("/settings/digilocker-api-key")
+async def save_digilocker_api_key(data: dict, request: Request):
+    """Save DigiLocker API key for the tenant."""
+    user = await get_current_user(request, db)
+    if user["role"] not in ("super_admin", "compliance_officer"):
+        raise HTTPException(403, "Insufficient permissions")
+
+    api_key = data.get("api_key", "").strip()
+    if not api_key:
+        await db.settings.update_one(
+            {"tenant_id": user["tenant_id"]},
+            {"$unset": {"digilocker_api_key": ""}},
+        )
+        return {"status": "removed", "mode": "demo"}
+
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {"digilocker_api_key": api_key}},
+        upsert=True,
+    )
+    await log_audit(user["tenant_id"], user, "digilocker_api_key_saved", "settings", None,
+                   {"provider": "digilocker"}, request)
+    return {"status": "saved", "mode": "live", "message": "DigiLocker API key saved."}
+
+
 # ===================================
 # CASE MANAGEMENT ROUTES
 # ===================================

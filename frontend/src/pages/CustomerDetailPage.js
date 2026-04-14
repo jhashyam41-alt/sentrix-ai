@@ -4,10 +4,11 @@ import axios from "axios";
 import logger from "../utils/logger";
 import {
   ArrowLeft, User, Shield, AlertTriangle, CheckCircle, XCircle, Clock,
-  FileText, Send, Calendar, MapPin, Briefcase, Phone, Mail
+  FileText, Send, Calendar, MapPin, Briefcase, Phone, Mail, BadgeCheck
 } from "lucide-react";
 import { RiskScoreCircle, RiskLevelBadge } from "../components/screening/RiskScoreCircle";
 import { KYCVerificationCard } from "../components/customers/KYCVerificationCard";
+import { DigiLockerCard } from "../components/customers/DigiLockerCard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -129,9 +130,32 @@ export default function CustomerDetailPage() {
 
           {/* Info */}
           <div style={{ flex: 1, minWidth: 200 }}>
-            <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#f1f5f9", marginBottom: "6px" }} data-testid="customer-name">
-              {cd.full_name || cd.company_legal_name || "Unnamed"}
-            </h1>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#f1f5f9" }} data-testid="customer-name">
+                {cd.full_name || cd.company_legal_name || "Unnamed"}
+              </h1>
+              {/* Verified Badge — shows when both Aadhaar + PAN are verified */}
+              {customer.kyc_verifications?.aadhaar?.status === "verified" && customer.kyc_verifications?.pan?.status === "verified" && (
+                <span data-testid="verified-badge" className="flex items-center gap-1" style={{
+                  fontSize: "10px", fontWeight: 700, padding: "3px 10px", borderRadius: "99px",
+                  background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)",
+                  color: "#10b981", letterSpacing: "0.5px",
+                }}>
+                  <BadgeCheck style={{ width: 12, height: 12 }} /> VERIFIED
+                </span>
+              )}
+              {/* Partial verification */}
+              {(customer.kyc_verifications?.aadhaar?.status === "verified" || customer.kyc_verifications?.pan?.status === "verified")
+                && !(customer.kyc_verifications?.aadhaar?.status === "verified" && customer.kyc_verifications?.pan?.status === "verified") && (
+                <span data-testid="partial-verified-badge" className="flex items-center gap-1" style={{
+                  fontSize: "10px", fontWeight: 700, padding: "3px 10px", borderRadius: "99px",
+                  background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)",
+                  color: "#f59e0b", letterSpacing: "0.5px",
+                }}>
+                  <BadgeCheck style={{ width: 12, height: 12 }} /> PARTIALLY VERIFIED
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3 flex-wrap mb-3">
               <RiskLevelBadge level={rl} />
               <span className="flex items-center gap-1">
@@ -208,6 +232,9 @@ export default function CustomerDetailPage() {
 
           {/* ========== KYC VERIFICATION ========== */}
           <KYCVerificationCard customerId={id} customerName={cd.full_name || cd.company_legal_name} />
+
+          {/* ========== DIGILOCKER VERIFICATION ========== */}
+          <DigiLockerCard customerId={id} customerName={cd.full_name || cd.company_legal_name} />
 
           {/* ========== DOCUMENTS ========== */}
           <div className="card-aml" data-testid="customer-documents">

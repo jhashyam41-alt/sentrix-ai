@@ -65,18 +65,28 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Lazy enrichment on GET /api/customers/{id} for existing customers
   - Customer detail: FATF badge (red/amber), warning banner with description, +risk pts
   - Customer list: BL/GL mini badges next to names
+- Phase 16: SLA Monitoring & Compliance (Apr 2026)
+  - Backend: GET /api/sla-metrics (mock deterministic data), GET /api/sla-breaches (mock alerts), PUT /api/sla-breaches/{id}/acknowledge, PUT /api/settings/sla
+  - SLA config seeded with RBI defaults: screening < 2hrs, case resolution < 168hrs (7 days), STR < 7 days, EDD < 7 working days, SAR < 24hrs
+  - Migration auto-injects sla_config into existing settings docs on startup
+  - Dashboard: SLA Compliance Monitor widget (3 metric cards + donut chart + weekly trend bars)
+  - Donut uses deep crimson (#8B0000), flame orange (#FF6B35), gold (#FFD700)
+  - Sidebar: SLA Breach Bell with unacknowledged count badge, upward dropdown with 5 severity-labeled alerts + Ack buttons
+  - Settings: SLA Targets tab with 5 configurable fields, "RBI Compliance Defaults" one-click template, auto-escalation toggle
+  - Screening table: SLA status column (ON TIME/AT RISK/BREACHED) computed dynamically from elapsed time vs target
+  - All SLA metrics and breach alerts use MOCK demo data (no cron jobs)
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports
+- P1: Refactor/Split `server.py` (>3600 lines) into route modules
 - P1: Component Splitting (CaseDetailPage.js 396L, RegisterPage.js 358L, CaseDetailPanel.js 322L)
-- P1: Backend refactoring (extract seed functions to services/seed_service.py)
 - P2: Stripe Billing integration (`/settings/billing`)
 - P2: Webhooks notification system
 - P2: In-App Notifications Bell + SendGrid emails
 - P2: Public self-service onboarding portal
 
 ## Test Credentials
-- Primary: shyam@rudrik.io / MySecure@2026! (super_admin)
+- Primary: shyam@rudrik.io / Assword@0231 (super_admin)
 - Default: admin@rudrik.io / Admin123!@# (super_admin)
 
 ## Known Items

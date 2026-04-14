@@ -47,6 +47,15 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Frontend passes api_key in request body, backend accepts as override
   - Cookie security fix: auto-detect production → secure=True, samesite=none
   - Idempotent admin seed script (migration-safe)
+- Phase 14: DigiLocker Verification (Apr 2026)
+  - New `services/digilocker_service.py` — Aadhaar XML + PAN card verification (demo + live)
+  - Endpoints: POST /api/customers/{id}/verify/aadhaar, POST /api/customers/{id}/verify/pan, GET /api/customers/{id}/verifications
+  - DigiLocker API key management via /api/settings/digilocker-api-key
+  - DigiLockerCard component on customer detail page with Aadhaar + PAN input/verify
+  - Green "VERIFIED" badge on customer name when both Aadhaar + PAN verified
+  - Yellow "PARTIALLY VERIFIED" badge when only one verified
+  - Timeline events created for each verification
+  - Overall kyc_status auto-updates to "verified" when both pass
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports

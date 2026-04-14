@@ -36,6 +36,15 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Logo replaces inline SVG on Sidebar, Login, and Register pages
   - Sidebar logo + footer link to https://rudrik.io
   - Login/Register logos link to https://rudrik.io
+- Phase 13: Sanctions.io API Integration (Apr 2026)
+  - New `services/sanctions_io_service.py` with live + demo modes
+  - API key management: save/validate/remove per-tenant via `/api/settings/sanctions-api-key`
+  - Screening status endpoint: `/api/settings/screening-status` (live vs demo)
+  - Updated screening endpoints to use Sanctions.io (75+ lists, 1M+ PEP, adverse media, criminal)
+  - Enhanced result card with match type badges, list source, country, provider badge
+  - Demo mode banner + status indicator (green=live, yellow=demo)
+  - Cookie security fix: auto-detect production → secure=True, samesite=none
+  - Idempotent admin seed script (migration-safe)
 
 ## Pending Features
 - P1: Reporting Module (`/reports`) with PDF/CSV exports

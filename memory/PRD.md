@@ -75,6 +75,13 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Settings: SLA Targets tab with 5 configurable fields, "RBI Compliance Defaults" one-click template, auto-escalation toggle
   - Screening table: SLA status column (ON TIME/AT RISK/BREACHED) computed dynamically from elapsed time vs target
   - All SLA metrics and breach alerts use MOCK demo data (no cron jobs)
+- Phase 18: Code Quality Refactor II (Apr 2026)
+  - Removed hardcoded credentials from 5 test files → import from conftest.py
+  - Replaced localStorage with sessionStorage for API keys (secureStorage.js utility)
+  - Added error logging to all empty catch blocks (ScreeningHubPage, BulkScreeningPanel, DigiLockerCard)
+  - Replaced global random.seed(42) with local random.Random(seed) instances in SLA metrics + seed functions
+  - Replaced array index keys with stable unique identifiers in 4 components
+  - 110/110 backend tests pass, zero regressions
 - Phase 17: Bulk Screening (Apr 2026)
   - Backend: POST /api/screenings/bulk/upload (CSV parse), POST /api/screenings/bulk/{batch_id}/run (screen all), GET /api/screenings/bulk/{batch_id}/download (Excel), GET /api/screenings/bulk/csv-template, GET /api/screenings/bulk/history
   - CSV template with 3 Indian example rows: Rajesh Kumar Sharma, Ananya Textiles Pvt Ltd, Deepak Malhotra

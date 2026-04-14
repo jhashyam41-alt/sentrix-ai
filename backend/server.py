@@ -728,6 +728,7 @@ async def seed_demo_audit_logs():
         return
 
     import random
+    rng = random.Random(99)
 
     await db.audit_logs.delete_many({"tenant_id": "default-tenant", "mode": "demo"})
 
@@ -749,29 +750,29 @@ async def seed_demo_audit_logs():
 
     action_templates = [
         {"action_type": "screening_run", "module": "screening", "weight": 18,
-         "details_fn": lambda cn: {"customer_name": cn, "screening_type": random.choice(["sanctions", "pep", "adverse_media"]), "result": random.choice(["clear", "potential_match", "match"]), "score": random.randint(5, 95)}},
+         "details_fn": lambda cn: {"customer_name": cn, "screening_type": rng.choice(["sanctions", "pep", "adverse_media"]), "result": rng.choice(["clear", "potential_match", "match"]), "score": rng.randint(5, 95)}},
         {"action_type": "case_created", "module": "cases", "weight": 10,
-         "details_fn": lambda cn: {"customer_name": cn, "case_type": random.choice(["pep_match", "sanctions_match", "adverse_media", "suspicious_transaction"]), "priority": random.choice(["critical", "high", "medium"])}},
+         "details_fn": lambda cn: {"customer_name": cn, "case_type": rng.choice(["pep_match", "sanctions_match", "adverse_media", "suspicious_transaction"]), "priority": rng.choice(["critical", "high", "medium"])}},
         {"action_type": "case_resolved", "module": "cases", "weight": 6,
-         "details_fn": lambda cn: {"customer_name": cn, "resolution_type": random.choice(["true_match_sar_filed", "false_positive", "true_match_risk_accepted", "duplicate"]), "days_open": random.randint(1, 21)}},
+         "details_fn": lambda cn: {"customer_name": cn, "resolution_type": rng.choice(["true_match_sar_filed", "false_positive", "true_match_risk_accepted", "duplicate"]), "days_open": rng.randint(1, 21)}},
         {"action_type": "api_key_created", "module": "api_keys", "weight": 4,
-         "details_fn": lambda _: {"client_name": random.choice(["Payment Gateway", "Mobile App", "Partner Portal", "Risk Engine"]), "rate_limit": random.choice([100, 500, 1000])}},
+         "details_fn": lambda _: {"client_name": rng.choice(["Payment Gateway", "Mobile App", "Partner Portal", "Risk Engine"]), "rate_limit": rng.choice([100, 500, 1000])}},
         {"action_type": "customer_created", "module": "customers", "weight": 14,
-         "details_fn": lambda cn: {"customer_name": cn, "customer_type": random.choice(["individual", "corporate"]), "risk_level": random.choice(["low", "medium", "high"])}},
+         "details_fn": lambda cn: {"customer_name": cn, "customer_type": rng.choice(["individual", "corporate"]), "risk_level": rng.choice(["low", "medium", "high"])}},
         {"action_type": "user_login", "module": "auth", "weight": 20,
-         "details_fn": lambda _: {"method": "password", "success": True, "mfa_used": random.choice([True, False])}},
+         "details_fn": lambda _: {"method": "password", "success": True, "mfa_used": rng.choice([True, False])}},
         {"action_type": "sar_filed", "module": "cases", "weight": 4,
-         "details_fn": lambda cn: {"customer_name": cn, "sar_reference": f"SAR-2026-{random.randint(1000, 9999)}", "case_type": random.choice(["pep_match", "sanctions_match", "suspicious_transaction"])}},
+         "details_fn": lambda cn: {"customer_name": cn, "sar_reference": f"SAR-2026-{rng.randint(1000, 9999)}", "case_type": rng.choice(["pep_match", "sanctions_match", "suspicious_transaction"])}},
         {"action_type": "settings_changed", "module": "settings", "weight": 3,
-         "details_fn": lambda _: {"setting": random.choice(["risk_thresholds", "notification_preferences", "screening_config", "tenant_name"]), "changed_by": "admin"}},
+         "details_fn": lambda _: {"setting": rng.choice(["risk_thresholds", "notification_preferences", "screening_config", "tenant_name"]), "changed_by": "admin"}},
         {"action_type": "case_status_changed", "module": "cases", "weight": 8,
-         "details_fn": lambda cn: {"customer_name": cn, "old_status": random.choice(["open", "in_progress"]), "new_status": random.choice(["in_progress", "escalated"])}},
+         "details_fn": lambda cn: {"customer_name": cn, "old_status": rng.choice(["open", "in_progress"]), "new_status": rng.choice(["in_progress", "escalated"])}},
         {"action_type": "quick_screening_run", "module": "screening", "weight": 5,
-         "details_fn": lambda cn: {"customer_name": cn, "checks": random.choice([["sanctions"], ["pep"], ["sanctions", "pep", "adverse_media"]]), "risk_score": random.randint(10, 90)}},
+         "details_fn": lambda cn: {"customer_name": cn, "checks": rng.choice([["sanctions"], ["pep"], ["sanctions", "pep", "adverse_media"]]), "risk_score": rng.randint(10, 90)}},
         {"action_type": "customer_updated", "module": "customers", "weight": 5,
-         "details_fn": lambda cn: {"customer_name": cn, "fields_updated": random.choice([["risk_level"], ["cdd_tier"], ["documents"], ["contact_info"]])}},
+         "details_fn": lambda cn: {"customer_name": cn, "fields_updated": rng.choice([["risk_level"], ["cdd_tier"], ["documents"], ["contact_info"]])}},
         {"action_type": "case_assigned", "module": "cases", "weight": 3,
-         "details_fn": lambda cn: {"customer_name": cn, "assigned_to": random.choice(["Priya Sharma", "Rahul Verma", "Anita Desai"])}},
+         "details_fn": lambda cn: {"customer_name": cn, "assigned_to": rng.choice(["Priya Sharma", "Rahul Verma", "Anita Desai"])}},
     ]
 
     weighted_templates = []
@@ -782,10 +783,10 @@ async def seed_demo_audit_logs():
     entries = []
 
     for i in range(100):
-        template = random.choice(weighted_templates)
-        user = random.choice(users)
-        cn = random.choice(customer_names)
-        hours_ago = random.uniform(0.5, 30 * 24)
+        template = rng.choice(weighted_templates)
+        user = rng.choice(users)
+        cn = rng.choice(customer_names)
+        hours_ago = rng.uniform(0.5, 30 * 24)
         ts = base_time - timedelta(hours=hours_ago)
 
         entry = {
@@ -795,7 +796,7 @@ async def seed_demo_audit_logs():
             "user_id": user["id"],
             "user_name": user["name"],
             "user_role": user["role"],
-            "ip_address": random.choice(ips),
+            "ip_address": rng.choice(ips),
             "action_type": template["action_type"],
             "module": template["module"],
             "record_id": str(uuid.uuid4()),
@@ -856,6 +857,7 @@ async def seed_recent_activity():
     ]
 
     import random
+    rng_feed = random.Random(77)
     ips = ["10.0.1.15", "10.0.1.22", "10.0.2.8", "10.0.1.45"]
 
     docs = []
@@ -868,7 +870,7 @@ async def seed_recent_activity():
             "user_id": user["id"],
             "user_name": user["name"],
             "user_role": user["role"],
-            "ip_address": random.choice(ips),
+            "ip_address": rng_feed.choice(ips),
             "action_type": e["action_type"],
             "module": e["module"],
             "record_id": str(uuid.uuid4()),
@@ -1966,9 +1968,9 @@ async def get_sla_metrics(request: Request):
     total_screenings = await db.screenings.count_documents({"tenant_id": tenant_id})
     total_cases = await db.cases.count_documents({"tenant_id": tenant_id})
 
-    # Generate realistic mock metrics
+    # Generate realistic mock metrics using isolated RNG (avoids mutating global state)
     import random
-    random.seed(42)  # Deterministic for demo consistency
+    rng = random.Random(42)
 
     total_tracked = max(total_screenings, 24)
     on_time = int(total_tracked * 0.82)
@@ -1984,12 +1986,12 @@ async def get_sla_metrics(request: Request):
     weekly_trend = []
     for i in range(8):
         week_date = (datetime.now(timezone.utc) - timedelta(weeks=7 - i)).strftime("%b %d")
-        compliance_pct = round(random.uniform(72, 95), 1)
+        compliance_pct = round(rng.uniform(72, 95), 1)
         weekly_trend.append({"week": week_date, "compliance": compliance_pct})
 
     return {
         "screening_turnaround": {
-            "avg_hours": round(random.uniform(1.2, 2.8), 1),
+            "avg_hours": round(rng.uniform(1.2, 2.8), 1),
             "target_hrs": screening_target,
             "on_time": on_time,
             "breached": breached,
@@ -1997,7 +1999,7 @@ async def get_sla_metrics(request: Request):
             "compliance_pct": round((on_time / total_tracked) * 100, 1) if total_tracked else 0,
         },
         "case_resolution": {
-            "avg_hours": round(random.uniform(96, 192), 1),
+            "avg_hours": round(rng.uniform(96, 192), 1),
             "target_hrs": case_target,
             "resolved_on_time": cases_resolved_on_time,
             "breached": cases_breached,
@@ -2007,7 +2009,7 @@ async def get_sla_metrics(request: Request):
         "escalation": {
             "count": escalation_count,
             "sar_target_hrs": sar_target,
-            "avg_escalation_hrs": round(random.uniform(8, 28), 1),
+            "avg_escalation_hrs": round(rng.uniform(8, 28), 1),
             "pending": max(1, escalation_count - int(escalation_count * 0.6)),
         },
         "weekly_trend": weekly_trend,

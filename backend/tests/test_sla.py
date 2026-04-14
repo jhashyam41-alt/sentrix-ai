@@ -4,13 +4,8 @@ Tests for SLA Dashboard Widget, Breach Alerts, SLA Config, and Screening SLA Sta
 """
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-
-# Test credentials
-PRIMARY_ADMIN_EMAIL = "shyam@rudrik.io"
-PRIMARY_ADMIN_PASSWORD = "Assword@0231"
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 
 @pytest.fixture(scope="module")
@@ -19,10 +14,9 @@ def auth_session():
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     
-    # Login to get auth cookies
     login_response = session.post(f"{BASE_URL}/api/auth/login", json={
-        "email": PRIMARY_ADMIN_EMAIL,
-        "password": PRIMARY_ADMIN_PASSWORD
+        "email": TEST_EMAIL,
+        "password": TEST_PASSWORD
     })
     
     if login_response.status_code != 200:

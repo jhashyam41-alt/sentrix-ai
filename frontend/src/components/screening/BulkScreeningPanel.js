@@ -5,6 +5,7 @@ import {
   Upload, Download, Play, FileSpreadsheet, Clock,
   CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp,
 } from "lucide-react";
+import { getSecureItem } from "../../utils/secureStorage";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -95,8 +96,8 @@ export function BulkScreeningPanel({ onScreeningComplete }) {
     setScreening(true);
     setError("");
 
-    // Pass localStorage API key if available
-    const apiKey = localStorage.getItem("rudrik_sanctions_api_key");
+    // Pass session-stored API key if available
+    const apiKey = getSecureItem("rudrik_sanctions_api_key");
     const body = apiKey ? { api_key: apiKey } : {};
 
     try {
@@ -126,7 +127,9 @@ export function BulkScreeningPanel({ onScreeningComplete }) {
           { withCredentials: true }
         );
         setProgress({ current: data.screened_count || 0, total: data.total_entities || 0 });
-      } catch { /* ignore */ }
+      } catch (err) {
+        logger.error("Bulk progress poll failed:", err);
+      }
     }, 1500);
     return () => clearInterval(interval);
   }, [screening, batchId]);
@@ -335,8 +338,8 @@ export function BulkScreeningPanel({ onScreeningComplete }) {
                 <span>ID Type</span>
                 <span>ID Number</span>
               </div>
-              {preview.map((row, i) => (
-                <div key={i} style={{
+              {preview.map((row) => (
+                <div key={row.row_num} style={{
                   display: "grid", gridTemplateColumns: "0.3fr 2fr 1fr 0.8fr 0.8fr 1fr",
                   gap: "8px", padding: "10px 16px",
                   borderTop: "1px solid #0f1520", fontSize: "12px",
@@ -427,7 +430,7 @@ export function BulkScreeningPanel({ onScreeningComplete }) {
                 const sla = SLA_STYLES[r.sla_status] || SLA_STYLES.on_time;
 
                 return (
-                  <div key={i} data-testid={`bulk-result-${i}`} style={{
+                  <div key={r.screening_id} data-testid={`bulk-result-${r.screening_id}`} style={{
                     display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 1.2fr 0.7fr",
                     gap: "8px", padding: "12px 16px",
                     borderTop: "1px solid #0f1520", alignItems: "center",

@@ -121,7 +121,7 @@ function WeeklyTrend({ data }) {
           const height = Math.max(6, ((d.compliance - min) / range) * 42);
           const color = d.compliance >= 85 ? "#10b981" : d.compliance >= 70 ? "#FF6B35" : "#8B0000";
           return (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+            <div key={d.week} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
               <div
                 title={`${d.week}: ${d.compliance}%`}
                 style={{

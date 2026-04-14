@@ -4,9 +4,8 @@ Tests for Aadhaar and PAN verification endpoints (demo mode)
 """
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 class TestDigiLockerVerification:
     """DigiLocker Aadhaar and PAN verification endpoint tests"""
@@ -17,10 +16,9 @@ class TestDigiLockerVerification:
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
         
-        # Login with test credentials
         login_resp = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "shyam@rudrik.io",
-            "password": "Assword@0231"
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD
         })
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
         self.user = login_resp.json()
@@ -255,8 +253,8 @@ class TestDigiLockerEdgeCases:
         self.session.headers.update({"Content-Type": "application/json"})
         
         login_resp = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "shyam@rudrik.io",
-            "password": "Assword@0231"
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD
         })
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
         
@@ -307,8 +305,8 @@ class TestDashboardAndScreeningRegression:
         self.session.headers.update({"Content-Type": "application/json"})
         
         login_resp = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "shyam@rudrik.io",
-            "password": "Assword@0231"
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD
         })
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
     

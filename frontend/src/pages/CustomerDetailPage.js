@@ -295,7 +295,7 @@ export default function CustomerDetailPage() {
                   const dCfg = KYC_CFG[doc.status] || KYC_CFG.pending;
                   const DIcon = dCfg.icon;
                   return (
-                    <div key={i} className="flex items-center justify-between"
+                    <div key={`${doc.doc_type}-${doc.doc_number}`} className="flex items-center justify-between"
                       style={{ padding: "12px 16px", background: "#080c12", borderRadius: "8px", border: "1px solid #1e2530" }}>
                       <div className="flex items-center gap-3">
                         <FileText style={{ width: 16, height: 16, color: "#2563eb" }} />

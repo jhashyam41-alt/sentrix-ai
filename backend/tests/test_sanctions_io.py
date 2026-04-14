@@ -5,11 +5,8 @@ Tests: GET /api/settings/screening-status, POST /api/settings/sanctions-api-key,
 """
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-TEST_EMAIL = "shyam@rudrik.io"
-TEST_PASSWORD = "Assword@0231"
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 
 @pytest.fixture(scope="module")

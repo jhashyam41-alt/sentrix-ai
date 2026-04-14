@@ -4,13 +4,8 @@ Tests for Black List (KP, IR, MM) and Grey List (25 countries) classification
 """
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-
-# Test credentials
-TEST_EMAIL = "shyam@rudrik.io"
-TEST_PASSWORD = "Assword@0231"
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 
 class TestFATFEndpoints:

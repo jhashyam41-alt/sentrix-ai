@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import logger from "../utils/logger";
 import { Plus, Search, Filter, X, Settings, Shield, FileSpreadsheet } from "lucide-react";
+import { getSecureItem, setSecureItem, removeSecureItem } from "../utils/secureStorage";
 import { NewScreeningForm } from "../components/screening/NewScreeningForm";
 import { ScreeningProgress } from "../components/screening/ScreeningProgress";
 import { ScreeningResultCard } from "../components/screening/ScreeningFinalResult";
@@ -44,7 +45,7 @@ export default function ScreeningHubPage() {
 
   // API Key + mode
   const [screeningMode, setScreeningMode] = useState(() =>
-    localStorage.getItem(LS_KEY) ? "live" : "demo"
+    getSecureItem(LS_KEY) ? "live" : "demo"
   );
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -68,41 +69,40 @@ export default function ScreeningHubPage() {
       try {
         const { data } = await axios.get(`${API}/settings/screening-status`, { withCredentials: true });
         const serverLive = data?.sanctions_io?.mode === "live";
-        const localKey = localStorage.getItem(LS_KEY);
+        const localKey = getSecureItem(LS_KEY);
         setScreeningMode(serverLive || localKey ? "live" : "demo");
-      } catch { /* ignore */ }
+      } catch (err) {
+        logger.error("Failed to check screening status:", err);
+      }
     };
     check();
   }, []);
 
-  // Save key — to localStorage + backend
+  // Save key — to session + backend
   const handleSaveKey = async () => {
     const key = apiKeyInput.trim();
     if (!key) return;
     setSavingKey(true);
     setKeyMsg("");
     try {
-      // Save to backend (validates the key)
       const { data } = await axios.post(
         `${API}/settings/sanctions-api-key`,
         { api_key: key },
         { withCredentials: true }
       );
-      localStorage.setItem(LS_KEY, key);
+      setSecureItem(LS_KEY, key);
       setScreeningMode("live");
       setKeyMsg(data.message || "API key saved & activated");
       setApiKeyInput("");
       setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1500);
     } catch (err) {
-      // If backend validation fails, still save locally and try direct
       const detail = err.response?.data?.detail || "";
       if (err.response?.status === 400 && detail.includes("Invalid")) {
         setKeyMsg("Invalid key — check your Sanctions.io dashboard");
       } else {
-        // Network issue or non-401 — save locally, will attempt live on screening
-        localStorage.setItem(LS_KEY, key);
+        setSecureItem(LS_KEY, key);
         setScreeningMode("live");
-        setKeyMsg("Key saved locally. Will use it for screening.");
+        setKeyMsg("Key saved in session. Will use it for screening.");
         setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1500);
       }
     } finally {
@@ -111,13 +111,15 @@ export default function ScreeningHubPage() {
   };
 
   const handleRemoveKey = async () => {
-    localStorage.removeItem(LS_KEY);
+    removeSecureItem(LS_KEY);
     setScreeningMode("demo");
     setApiKeyInput("");
     setKeyMsg("Switched to Demo Mode");
     try {
       await axios.delete(`${API}/settings/sanctions-api-key`, { withCredentials: true });
-    } catch { /* ignore */ }
+    } catch (err) {
+      logger.error("Failed to remove API key from server:", err);
+    }
     setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1200);
   };
 
@@ -162,8 +164,7 @@ export default function ScreeningHubPage() {
         checks: form.checks,
       };
 
-      // Pass localStorage API key to backend
-      const localKey = localStorage.getItem(LS_KEY);
+      const localKey = getSecureItem(LS_KEY);
       if (localKey) {
         payload.api_key = localKey;
       }
@@ -234,7 +235,7 @@ export default function ScreeningHubPage() {
     }
   };
 
-  const hasLocalKey = !!localStorage.getItem(LS_KEY);
+  const hasLocalKey = !!getSecureItem(LS_KEY);
 
   return (
     <div data-testid="screening-hub-page">

@@ -4,15 +4,10 @@ Tests for CSV template download, CSV upload, bulk screening run, progress, downl
 """
 import pytest
 import requests
-import os
 import io
 import csv
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-
-# Test credentials
-TEST_EMAIL = "shyam@rudrik.io"
-TEST_PASSWORD = "Assword@0231"
+from conftest import TEST_EMAIL, TEST_PASSWORD, BASE_URL
 
 
 class TestBulkScreeningAuth:

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Shield, CheckCircle, XCircle, Clock, CreditCard, Fingerprint, Loader2 } from "lucide-react";
+import { getSecureItem } from "../../utils/secureStorage";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -37,7 +38,9 @@ export function DigiLockerCard({ customerId, customerName }) {
     try {
       const { data } = await axios.get(`${API}/customers/${customerId}/verifications`, { withCredentials: true });
       setVerifications({ aadhaar: data.aadhaar || {}, pan: data.pan || {} });
-    } catch { /* ignore */ }
+    } catch (err) {
+      // Silently fail for verification fetch — customer may not have verifications yet
+    }
   }, [customerId]);
 
   useEffect(() => { fetchVerifications(); }, [fetchVerifications]);
@@ -51,7 +54,7 @@ export function DigiLockerCard({ customerId, customerName }) {
     setMsg("");
     try {
       const payload = { aadhaar_number: aadhaarInput.trim() };
-      const localKey = localStorage.getItem("rudrik_digilocker_api_key");
+      const localKey = getSecureItem("rudrik_digilocker_api_key");
       if (localKey) payload.api_key = localKey;
 
       const { data } = await axios.post(`${API}/customers/${customerId}/verify/aadhaar`, payload, { withCredentials: true });
@@ -75,7 +78,7 @@ export function DigiLockerCard({ customerId, customerName }) {
     setMsg("");
     try {
       const payload = { pan_number: cleaned };
-      const localKey = localStorage.getItem("rudrik_digilocker_api_key");
+      const localKey = getSecureItem("rudrik_digilocker_api_key");
       if (localKey) payload.api_key = localKey;
 
       const { data } = await axios.post(`${API}/customers/${customerId}/verify/pan`, payload, { withCredentials: true });

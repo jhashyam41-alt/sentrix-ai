@@ -1,8 +1,16 @@
 import React from "react";
-import { Eye, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Eye, RefreshCw, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { RiskLevelBadge } from "./RiskScoreCircle";
 
 const CHECK_LABELS = { kyc: "KYC", sanctions: "SAN", pep: "PEP", adverse_media: "AM" };
+
+const SLA_STYLES = {
+  on_time: { color: "#10b981", bg: "rgba(16,185,129,0.12)", label: "On Time" },
+  at_risk: { color: "#FFD700", bg: "rgba(255,215,0,0.1)", label: "At Risk" },
+  breached: { color: "#8B0000", bg: "rgba(139,0,0,0.15)", label: "Breached" },
+  pending: { color: "#94a3b8", bg: "rgba(148,163,184,0.1)", label: "Pending" },
+  unknown: { color: "#475569", bg: "rgba(71,85,105,0.1)", label: "—" },
+};
 
 export function ScreeningHistoryTable({ screenings, total, page, pages, onPageChange, onView, onRescreen, loading }) {
   if (loading) {
@@ -33,7 +41,7 @@ export function ScreeningHistoryTable({ screenings, total, page, pages, onPageCh
           {/* Table header */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1fr 0.8fr 1fr 1.2fr 1.2fr 0.8fr 1fr",
+            gridTemplateColumns: "2fr 1fr 0.8fr 1fr 1.2fr 1fr 0.8fr 0.8fr 1fr",
             gap: "8px",
             padding: "12px 24px",
             background: "#080c12",
@@ -51,6 +59,7 @@ export function ScreeningHistoryTable({ screenings, total, page, pages, onPageCh
             <span>Checks</span>
             <span>Date</span>
             <span>Status</span>
+            <span>SLA</span>
             <span>Actions</span>
           </div>
 
@@ -58,7 +67,7 @@ export function ScreeningHistoryTable({ screenings, total, page, pages, onPageCh
           {screenings.map((s) => (
             <div key={s.id} data-testid={`screening-row-${s.id}`} style={{
               display: "grid",
-              gridTemplateColumns: "2fr 1fr 0.8fr 1fr 1.2fr 1.2fr 0.8fr 1fr",
+              gridTemplateColumns: "2fr 1fr 0.8fr 1fr 1.2fr 1fr 0.8fr 0.8fr 1fr",
               gap: "8px",
               padding: "14px 24px",
               borderBottom: "1px solid #0f1520",
@@ -103,6 +112,21 @@ export function ScreeningHistoryTable({ screenings, total, page, pages, onPageCh
               }}>
                 {s.status}
               </span>
+              {/* SLA Status Column */}
+              {(() => {
+                const sla = SLA_STYLES[s.sla_status] || SLA_STYLES.unknown;
+                return (
+                  <div data-testid={`sla-status-${s.id}`} className="flex items-center gap-1" title={s.sla_elapsed_hrs ? `${s.sla_elapsed_hrs}h elapsed` : ""}>
+                    <Clock style={{ width: "10px", height: "10px", color: sla.color }} />
+                    <span style={{
+                      fontSize: "9px", fontWeight: 700, padding: "2px 6px", borderRadius: "3px",
+                      background: sla.bg, color: sla.color, textTransform: "uppercase",
+                    }}>
+                      {sla.label}
+                    </span>
+                  </div>
+                );
+              })()}
               <div className="flex gap-2">
                 <button onClick={() => onView(s)} data-testid={`view-screening-${s.id}`}
                   title="View details"

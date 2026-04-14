@@ -9,6 +9,7 @@ import { RiskDonut } from "../components/dashboard/RiskDonut";
 import { ActivityFeed } from "../components/dashboard/ActivityFeed";
 import { IndiaHeatMap } from "../components/dashboard/IndiaHeatMap";
 import { IntegrationCards } from "../components/dashboard/IntegrationCards";
+import { SLAComplianceWidget } from "../components/dashboard/SLAComplianceWidget";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -237,7 +238,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Row 3: Heat Map + Activity Feed */}
+      {/* Row 3: SLA Compliance Monitor */}
+      <div className="card-aml mb-6" data-testid="sla-compliance-section">
+        <SLAComplianceWidget />
+      </div>
+
+      {/* Row 4: Heat Map + Activity Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
         <div className="card-aml" data-testid="screening-heatmap">
           <h2 style={{ fontSize: "13px", fontWeight: "700", color: "#f1f5f9", marginBottom: "12px" }}>Screening Concentration</h2>
@@ -252,7 +258,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Row 4: Integrations + API Usage */}
+      {/* Row 5: Integrations + API Usage */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="card-aml" data-testid="integration-status">
           <h2 style={{ fontSize: "13px", fontWeight: "700", color: "#f1f5f9", marginBottom: "16px" }}>Integration Status</h2>

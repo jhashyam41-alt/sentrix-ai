@@ -87,6 +87,19 @@ async def startup_event():
     await seed_recent_activity()
     # Seed default settings
     await seed_default_settings()
+    # Migrate: ensure sla_config exists on existing settings
+    await db.settings.update_many(
+        {"sla_config": {"$exists": False}},
+        {"$set": {"sla_config": {
+            "screening_target_hrs": 2,
+            "case_resolution_target_hrs": 168,
+            "str_filing_target_days": 7,
+            "edd_completion_target_days": 7,
+            "sar_filing_target_hrs": 24,
+            "auto_escalate_on_breach": True,
+            "template": "rbi_defaults",
+        }}}
+    )
     # Seed demo team members
     await seed_demo_team_members()
 
@@ -902,6 +915,15 @@ async def seed_default_settings():
             "auto_escalate_unacceptable_risk": True,
             "block_onboarding_kyc_fails": False,
             "rescreen_interval_days": 90,
+        },
+        "sla_config": {
+            "screening_target_hrs": 2,
+            "case_resolution_target_hrs": 168,
+            "str_filing_target_days": 7,
+            "edd_completion_target_days": 7,
+            "sar_filing_target_hrs": 24,
+            "auto_escalate_on_breach": True,
+            "template": "rbi_defaults",
         },
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -1891,6 +1913,195 @@ async def update_compliance_rules(data: dict, request: Request):
     )
     await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "compliance_rules", "rules": update}, request)
     return {"message": "Compliance rules updated"}
+
+
+# ===================================
+# SLA MONITORING & COMPLIANCE
+# ===================================
+
+@api_router.put("/settings/sla")
+async def update_sla_config(data: dict, request: Request):
+    user = await get_current_user(request, db)
+    if user["role"] not in ["super_admin", "compliance_officer"]:
+        raise HTTPException(403, "Access denied")
+
+    allowed = {
+        "screening_target_hrs", "case_resolution_target_hrs",
+        "str_filing_target_days", "edd_completion_target_days",
+        "sar_filing_target_hrs", "auto_escalate_on_breach", "template"
+    }
+    update = {}
+    for k, v in data.items():
+        if k in allowed:
+            if k == "auto_escalate_on_breach":
+                update[k] = bool(v)
+            elif k == "template":
+                update[k] = str(v)
+            else:
+                update[k] = max(0.5, float(v))
+
+    await db.settings.update_one(
+        {"tenant_id": user["tenant_id"]},
+        {"$set": {f"sla_config.{k}": v for k, v in update.items()}}
+    )
+    await log_audit(user["tenant_id"], user, "settings_changed", "settings", None, {"section": "sla_config", "config": update}, request)
+    return {"message": "SLA configuration updated"}
+
+
+@api_router.get("/sla-metrics")
+async def get_sla_metrics(request: Request):
+    """Return mock SLA compliance metrics for the dashboard."""
+    user = await get_current_user(request, db)
+    tenant_id = user["tenant_id"]
+
+    # Load SLA config for targets
+    settings = await db.settings.find_one({"tenant_id": tenant_id}, {"_id": 0, "sla_config": 1})
+    sla_config = (settings or {}).get("sla_config", {})
+    screening_target = sla_config.get("screening_target_hrs", 2)
+    case_target = sla_config.get("case_resolution_target_hrs", 168)
+    sar_target = sla_config.get("sar_filing_target_hrs", 24)
+
+    # Count real screenings and cases for context
+    total_screenings = await db.screenings.count_documents({"tenant_id": tenant_id})
+    total_cases = await db.cases.count_documents({"tenant_id": tenant_id})
+
+    # Generate realistic mock metrics
+    import random
+    random.seed(42)  # Deterministic for demo consistency
+
+    total_tracked = max(total_screenings, 24)
+    on_time = int(total_tracked * 0.82)
+    breached = total_tracked - on_time
+
+    cases_tracked = max(total_cases, 12)
+    cases_resolved_on_time = int(cases_tracked * 0.75)
+    cases_breached = cases_tracked - cases_resolved_on_time
+
+    escalation_count = max(3, int(cases_tracked * 0.17))
+
+    # Weekly trend data (last 8 weeks)
+    weekly_trend = []
+    for i in range(8):
+        week_date = (datetime.now(timezone.utc) - timedelta(weeks=7 - i)).strftime("%b %d")
+        compliance_pct = round(random.uniform(72, 95), 1)
+        weekly_trend.append({"week": week_date, "compliance": compliance_pct})
+
+    return {
+        "screening_turnaround": {
+            "avg_hours": round(random.uniform(1.2, 2.8), 1),
+            "target_hrs": screening_target,
+            "on_time": on_time,
+            "breached": breached,
+            "total": total_tracked,
+            "compliance_pct": round((on_time / total_tracked) * 100, 1) if total_tracked else 0,
+        },
+        "case_resolution": {
+            "avg_hours": round(random.uniform(96, 192), 1),
+            "target_hrs": case_target,
+            "resolved_on_time": cases_resolved_on_time,
+            "breached": cases_breached,
+            "total": cases_tracked,
+            "compliance_pct": round((cases_resolved_on_time / cases_tracked) * 100, 1) if cases_tracked else 0,
+        },
+        "escalation": {
+            "count": escalation_count,
+            "sar_target_hrs": sar_target,
+            "avg_escalation_hrs": round(random.uniform(8, 28), 1),
+            "pending": max(1, escalation_count - int(escalation_count * 0.6)),
+        },
+        "weekly_trend": weekly_trend,
+        "donut": {
+            "on_time": on_time + cases_resolved_on_time,
+            "breached": breached + cases_breached,
+            "pending": max(2, int(total_tracked * 0.08)),
+        },
+    }
+
+
+@api_router.get("/sla-breaches")
+async def get_sla_breaches(request: Request):
+    """Return mock recent SLA breach alerts."""
+    user = await get_current_user(request, db)
+
+    # Generate mock breach alerts
+    now = datetime.now(timezone.utc)
+    breaches = [
+        {
+            "id": "breach-001",
+            "type": "screening_turnaround",
+            "severity": "high",
+            "title": "KYC Screening SLA Breached",
+            "description": "Customer Rahul Verma screening exceeded 2hr target (took 3.2 hrs)",
+            "entity_name": "Rahul Verma",
+            "target_hrs": 2,
+            "actual_hrs": 3.2,
+            "breached_at": (now - timedelta(hours=2)).isoformat(),
+            "acknowledged": False,
+        },
+        {
+            "id": "breach-002",
+            "type": "case_resolution",
+            "severity": "critical",
+            "title": "Case Resolution SLA Critical",
+            "description": "Case #CASE-2024-0042 unresolved past 7-day RBI deadline",
+            "entity_name": "Ananya Textiles Ltd",
+            "target_hrs": 168,
+            "actual_hrs": 198,
+            "breached_at": (now - timedelta(hours=6)).isoformat(),
+            "acknowledged": False,
+        },
+        {
+            "id": "breach-003",
+            "type": "sar_filing",
+            "severity": "critical",
+            "title": "SAR Filing Overdue",
+            "description": "STR for Deepak Malhotra not filed within 24hrs of escalation",
+            "entity_name": "Deepak Malhotra",
+            "target_hrs": 24,
+            "actual_hrs": 31,
+            "breached_at": (now - timedelta(hours=12)).isoformat(),
+            "acknowledged": True,
+        },
+        {
+            "id": "breach-004",
+            "type": "screening_turnaround",
+            "severity": "medium",
+            "title": "Screening Turnaround Warning",
+            "description": "Customer Priya Kapoor screening at 1.8 hrs (approaching 2hr target)",
+            "entity_name": "Priya Kapoor",
+            "target_hrs": 2,
+            "actual_hrs": 1.8,
+            "breached_at": (now - timedelta(hours=18)).isoformat(),
+            "acknowledged": True,
+        },
+        {
+            "id": "breach-005",
+            "type": "edd_completion",
+            "severity": "high",
+            "title": "EDD Completion Overdue",
+            "description": "Enhanced Due Diligence for Sunrise Exports past 7-day target",
+            "entity_name": "Sunrise Exports",
+            "target_hrs": 56,
+            "actual_hrs": 72,
+            "breached_at": (now - timedelta(days=1)).isoformat(),
+            "acknowledged": False,
+        },
+    ]
+
+    unacknowledged = sum(1 for b in breaches if not b["acknowledged"])
+
+    return {
+        "breaches": breaches,
+        "total": len(breaches),
+        "unacknowledged": unacknowledged,
+    }
+
+
+@api_router.put("/sla-breaches/{breach_id}/acknowledge")
+async def acknowledge_sla_breach(breach_id: str, request: Request):
+    """Acknowledge an SLA breach alert (mock)."""
+    await get_current_user(request, db)
+    return {"message": f"Breach {breach_id} acknowledged"}
 
 
 @api_router.get("/settings/team")
@@ -3055,6 +3266,29 @@ async def list_screenings(
     records = await db.screening_records.find(
         query, {"_id": 0}
     ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+
+    # Compute SLA status for each record
+    settings = await db.settings.find_one({"tenant_id": user["tenant_id"]}, {"_id": 0, "sla_config": 1})
+    target_hrs = (settings or {}).get("sla_config", {}).get("screening_target_hrs", 2)
+    for rec in records:
+        created = rec.get("created_at")
+        completed = rec.get("completed_at")
+        if created and completed:
+            try:
+                t_created = datetime.fromisoformat(created)
+                t_completed = datetime.fromisoformat(completed)
+                elapsed_hrs = (t_completed - t_created).total_seconds() / 3600
+                if elapsed_hrs <= target_hrs * 0.8:
+                    rec["sla_status"] = "on_time"
+                elif elapsed_hrs <= target_hrs:
+                    rec["sla_status"] = "at_risk"
+                else:
+                    rec["sla_status"] = "breached"
+                rec["sla_elapsed_hrs"] = round(elapsed_hrs, 2)
+            except (ValueError, TypeError):
+                rec["sla_status"] = "unknown"
+        else:
+            rec["sla_status"] = "pending"
 
     return {
         "screenings": records,

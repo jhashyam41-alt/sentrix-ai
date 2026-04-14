@@ -7,13 +7,15 @@ import { IntegrationsTab } from "../components/settings/IntegrationsTab";
 import { NotificationsTab } from "../components/settings/NotificationsTab";
 import { TeamTab } from "../components/settings/TeamTab";
 import { ComplianceTab } from "../components/settings/ComplianceTab";
-import { Settings, Sliders, Plug, Bell, Users, ShieldCheck } from "lucide-react";
+import { SLATab } from "../components/settings/SLATab";
+import { Settings, Sliders, Plug, Bell, Users, ShieldCheck, Clock } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const TABS = [
   { id: "general", label: "General", icon: Settings },
   { id: "risk", label: "Risk Scoring", icon: Sliders },
+  { id: "sla", label: "SLA Targets", icon: Clock },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "team", label: "Team Members", icon: Users },
@@ -98,6 +100,7 @@ export default function SettingsPage() {
       {/* Tab Content */}
       {activeTab === "general" && <GeneralTab {...tabProps} />}
       {activeTab === "risk" && <RiskScoringTab {...tabProps} />}
+      {activeTab === "sla" && <SLATab {...tabProps} />}
       {activeTab === "integrations" && <IntegrationsTab {...tabProps} />}
       {activeTab === "notifications" && <NotificationsTab {...tabProps} />}
       {activeTab === "team" && <TeamTab {...tabProps} />}

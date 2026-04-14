@@ -5,6 +5,7 @@ import {
   Shield, LayoutDashboard, Users, FileSearch, AlertCircle,
   FileText, Settings, LogOut, Bell, Key
 } from "lucide-react";
+import { SLABreachBell } from "./dashboard/SLABreachBell";
 
 export default function Sidebar() {
   const location = useLocation();
@@ -157,29 +158,32 @@ export default function Sidebar() {
               letterSpacing: "0.5px"
             }}>{user?.role?.replace("_", " ")}</div>
           </div>
-          <button
-            onClick={handleLogout}
-            data-testid="logout-button"
-            style={{
-              background: "transparent",
-              border: "1px solid #1e2530",
-              borderRadius: "6px",
-              padding: "6px",
-              cursor: "pointer",
-              color: "#94a3b8",
-              transition: "all 0.2s ease"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#1e2530";
-              e.currentTarget.style.color = "#f1f5f9";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = "#94a3b8";
-            }}
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <SLABreachBell />
+            <button
+              onClick={handleLogout}
+              data-testid="logout-button"
+              style={{
+                background: "transparent",
+                border: "1px solid #1e2530",
+                borderRadius: "6px",
+                padding: "6px",
+                cursor: "pointer",
+                color: "#94a3b8",
+                transition: "all 0.2s ease"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#1e2530";
+                e.currentTarget.style.color = "#f1f5f9";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "#94a3b8";
+              }}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

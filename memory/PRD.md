@@ -42,7 +42,9 @@ Build a production-ready, multi-tenant AML/KYC SaaS platform for financial insti
   - Screening status endpoint: `/api/settings/screening-status` (live vs demo)
   - Updated screening endpoints to use Sanctions.io (75+ lists, 1M+ PEP, adverse media, criminal)
   - Enhanced result card with match type badges, list source, country, provider badge
-  - Demo mode banner + status indicator (green=live, yellow=demo)
+  - Gear icon → modal for API key input (saved to localStorage + backend)
+  - Live/Demo mode badges (green/yellow), toast notifications on API error
+  - Frontend passes api_key in request body, backend accepts as override
   - Cookie security fix: auto-detect production → secure=True, samesite=none
   - Idempotent admin seed script (migration-safe)
 

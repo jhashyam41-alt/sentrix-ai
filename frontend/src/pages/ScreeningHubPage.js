@@ -63,7 +63,8 @@ export default function ScreeningHubPage() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  // Check server-side key on mount too
+  // Check server-side key on mount — API, LS_KEY, axios, getSecureItem are module-level constants
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const check = async () => {
       try {
@@ -123,7 +124,7 @@ export default function ScreeningHubPage() {
     setTimeout(() => { setShowKeyModal(false); setKeyMsg(""); }, 1200);
   };
 
-  // Fetch history
+  // Fetch history — API, axios, logger are module-level constants; only reactive deps listed
   const fetchScreenings = useCallback(async (p = 1) => {
     setHistoryLoading(true);
     try {

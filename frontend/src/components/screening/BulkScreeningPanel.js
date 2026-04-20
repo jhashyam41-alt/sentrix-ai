@@ -6,6 +6,7 @@ import {
   CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { getSecureItem } from "../../utils/secureStorage";
+import { riskScoreColor } from "../../utils/styleHelpers";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -449,7 +450,7 @@ export function BulkScreeningPanel({ onScreeningComplete }) {
                     </span>
                     <span style={{
                       fontSize: "14px", fontWeight: 700,
-                      color: r.risk_score <= 25 ? "#10b981" : r.risk_score <= 50 ? "#f59e0b" : "#ef4444",
+                      color: riskScoreColor(r.risk_score),
                     }}>
                       {r.risk_score}
                     </span>

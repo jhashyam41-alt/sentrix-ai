@@ -56,6 +56,7 @@ export function ScreeningProgress({ checks, isRunning, isComplete }) {
         {activeSteps.map((step, i) => {
           const done = completedSteps.includes(i);
           const active = currentStep === i && isRunning;
+          const ss = stepStyle(done, active);
           return (
             <div key={step.key} className="flex items-center gap-3"
               data-testid={`progress-step-${step.key}`}
@@ -67,7 +68,7 @@ export function ScreeningProgress({ checks, isRunning, isComplete }) {
               <div style={{
                 width: 28, height: 28, borderRadius: "50%", display: "flex",
                 alignItems: "center", justifyContent: "center",
-                background: done ? "rgba(16,185,129,0.15)" : active ? "rgba(37,99,235,0.15)" : "#1e2530",
+                background: ss.bg,
                 transition: "background 0.3s",
               }}>
                 {done ? (
@@ -79,8 +80,8 @@ export function ScreeningProgress({ checks, isRunning, isComplete }) {
                 )}
               </div>
               <span style={{
-                fontSize: "13px", fontWeight: done ? 600 : 400,
-                color: done ? "#10b981" : active ? "#f1f5f9" : "#475569",
+                fontSize: "13px", fontWeight: ss.fontWeight,
+                color: ss.color,
                 transition: "color 0.3s",
               }}>
                 {done ? step.doneLabel : step.label}

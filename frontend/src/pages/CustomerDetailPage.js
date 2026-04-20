@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { riskScoreColor, riskLevelColor } from "../utils/styleHelpers";
 import logger from "../utils/logger";
 import {
   ArrowLeft, User, Shield, AlertTriangle, CheckCircle, XCircle, Clock,
@@ -60,6 +61,7 @@ export default function CustomerDetailPage() {
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
+  // API, axios, logger are module-level constants — [id] is the only reactive dep
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -336,7 +338,7 @@ export default function CustomerDetailPage() {
                     <div className="flex items-center gap-3">
                       <span style={{
                         fontSize: "14px", fontWeight: 700,
-                        color: s.risk_score <= 25 ? "#10b981" : s.risk_score <= 50 ? "#f59e0b" : "#ef4444",
+                        color: riskScoreColor(s.risk_score),
                       }}>{s.risk_score}</span>
                       <RiskLevelBadge level={s.risk_level} />
                     </div>
@@ -377,7 +379,7 @@ export default function CustomerDetailPage() {
               })}
               <div style={{ borderTop: "1px solid #1e2530", paddingTop: "10px", display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9" }}>Total</span>
-                <span style={{ fontSize: "16px", fontWeight: 800, color: rl === "LOW" ? "#10b981" : rl === "MEDIUM" ? "#f59e0b" : "#ef4444" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: riskLevelColor(rl) }}>
                   {customer.risk_score || 0}
                 </span>
               </div>

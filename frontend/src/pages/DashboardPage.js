@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [screenQuery, setScreenQuery] = useState("");
 
+  // API, axios, logger are module-level constants — [] is intentional (mount-only fetch)
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {

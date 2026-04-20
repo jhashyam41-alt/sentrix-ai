@@ -38,6 +38,7 @@ export default function CustomersPage() {
   const [filterCountry, setFilterCountry] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
+  // API, axios, logger are module-level constants — only reactive filter state listed
   const fetchCustomers = useCallback(async (p = 1) => {
     setLoading(true);
     try {

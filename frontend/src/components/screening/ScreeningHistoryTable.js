@@ -1,6 +1,7 @@
 import React from "react";
 import { Eye, RefreshCw, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { RiskLevelBadge } from "./RiskScoreCircle";
+import { riskScoreColor } from "../../utils/styleHelpers";
 
 const CHECK_LABELS = { kyc: "KYC", sanctions: "SAN", pep: "PEP", adverse_media: "AM" };
 
@@ -86,7 +87,7 @@ export function ScreeningHistoryTable({ screenings, total, page, pages, onPageCh
               <span style={{ fontSize: "12px", color: "#94a3b8" }}>{s.id_type || "—"}</span>
               <span style={{
                 fontSize: "14px", fontWeight: 700,
-                color: s.risk_score <= 25 ? "#10b981" : s.risk_score <= 50 ? "#f59e0b" : s.risk_score <= 75 ? "#ef4444" : "#dc2626",
+                color: riskScoreColor(s.risk_score),
               }}>
                 {s.risk_score}
               </span>

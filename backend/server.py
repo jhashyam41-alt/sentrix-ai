@@ -2024,7 +2024,7 @@ async def get_sla_metrics(request: Request):
 @api_router.get("/sla-breaches")
 async def get_sla_breaches(request: Request):
     """Return mock recent SLA breach alerts."""
-    user = await get_current_user(request, db)
+    await get_current_user(request, db)  # auth check
 
     # Generate mock breach alerts
     now = datetime.now(timezone.utc)
